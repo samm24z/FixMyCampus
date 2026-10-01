@@ -1,14 +1,29 @@
-"""Review-1 ticket detail and dashboard response schemas."""
+"""Ticket detail, dashboard, and action schemas."""
 
 import uuid
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict
 
+from app.models.enums import TicketStatusEnum
 from app.schemas.assignment import AssignmentRead
 from app.schemas.comment import CommentRead
 from app.schemas.status_history import StatusHistoryRead
 from app.schemas.ticket import TicketRead
+
+
+class TicketPermissions(BaseModel):
+    """What the requesting user may do with this ticket (computed server-side).
+
+    The UI renders controls from this instead of re-implementing the rules.
+    """
+
+    allowed_statuses: List[TicketStatusEnum] = []
+    can_assign: bool = False
+    can_edit_triage: bool = False
+    can_comment: bool = False
+    can_comment_internal: bool = False
+    can_reopen: bool = False
 
 
 class TicketDetailRead(TicketRead):
@@ -18,18 +33,15 @@ class TicketDetailRead(TicketRead):
     comments: List[CommentRead] = []
     history: List[StatusHistoryRead] = []
     assignments: List[AssignmentRead] = []
+    permissions: TicketPermissions = TicketPermissions()
 
 
 class DashboardSummary(BaseModel):
     total_tickets: int
     open_tickets: int
     resolved_tickets: int
+    by_status: Dict[str, int] = {}
     recent_tickets: List[TicketRead] = []
-
-
-class TicketCommentRequest(BaseModel):
-    content: str
-    is_internal: bool = False
 
 
 class TicketAssignmentRequest(BaseModel):

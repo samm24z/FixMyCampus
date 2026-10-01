@@ -1,32 +1,56 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LogIn, KeyRound, Mail, ShieldAlert } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ConfigBanner } from '@/components/auth/ConfigBanner';
 import { getApiError, roleHome, useAuth } from '@/lib/auth';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { user, login, requestPasswordReset } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Also covers arriving from the email-confirmation link, which signs the user in on this page.
+  useEffect(() => {
+    if (user) {
+      const destination = (location.state as { from?: string } | null)?.from || roleHome(user.role);
+      navigate(destination, { replace: true });
+    }
+  }, [user, location.state, navigate]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError('');
+    setNotice('');
     setIsSubmitting(true);
     try {
-      const user = await login(email, password);
-      const destination = (location.state as { from?: string } | null)?.from || roleHome(user.role);
-      navigate(destination, { replace: true });
+      await login(email, password);
     } catch (loginError) {
       setError(getApiError(loginError, 'Invalid email or password.'));
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleForgotPassword() {
+    setError('');
+    setNotice('');
+    if (!email) {
+      setError('Enter your email above first, then choose "Forgot password?".');
+      return;
+    }
+    try {
+      await requestPasswordReset(email);
+      setNotice('If that email has an account, a password reset link is on its way.');
+    } catch (resetError) {
+      setError(getApiError(resetError));
     }
   }
 
@@ -44,7 +68,9 @@ export const LoginPage: React.FC = () => {
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>
+          <ConfigBanner />
           {error && <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+          {notice && <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm">{notice}</div>}
           <div className="space-y-2">
             <label className="text-sm font-medium">Campus Email</label>
             <div className="relative">
@@ -73,10 +99,13 @@ export const LoginPage: React.FC = () => {
               />
             </div>
           </div>
-          <div className="pt-2">
+          <div className="pt-2 space-y-3">
             <Button className="w-full" type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Signing in...' : 'Sign In'}
             </Button>
+            <button type="button" onClick={handleForgotPassword} className="w-full text-center text-xs text-primary hover:underline">
+              Forgot password?
+            </button>
           </div>
           </form>
         </CardContent>

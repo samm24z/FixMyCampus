@@ -1,10 +1,11 @@
-"""Seed or reset the development database with deterministic reference data.
+"""Seed or reset the database with deterministic reference data.
 
 Usage from the backend directory:
-    python scripts/seed_database.py
-    python scripts/seed_database.py --reset
+    python scripts/seed_database.py           # roles, departments, categories, SLA rules
+    python scripts/seed_database.py --reset   # wipe that reference data (and users) first
 
-The demo passwords are development-only and must never be reused elsewhere.
+Accounts are separate: create the first admin with scripts/create_admin.py and optional demo
+accounts with scripts/seed_demo_users.py (both create the login in Supabase Auth).
 """
 
 import argparse
@@ -18,12 +19,9 @@ from sqlalchemy import delete, func, select
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.database import AsyncSessionLocal
-from app.core.security import get_password_hash
 from app.models import Category, Department, Role, SLARule, Ticket, User
+from scripts.demo_users import NAMESPACE
 
-
-DEMO_PASSWORD = "FixMyCampus-Dev-2026!"
-NAMESPACE = uuid.UUID("3d3f5c49-6b2e-4e6b-95c4-8bb1c75f9d31")
 
 ROLE_DATA = [
     ("Student", "STUDENT"),
@@ -73,8 +71,8 @@ async def reset_database(session) -> None:
     await session.commit()
 
 
-async def seed_database(reset: bool = False) -> dict[str, int]:
-    async with AsyncSessionLocal() as session:
+async def seed_database(reset: bool = False, session_factory=AsyncSessionLocal) -> dict[str, int]:
+    async with session_factory() as session:
         if reset:
             await reset_database(session)
         elif await session.scalar(select(func.count()).select_from(Role)):
@@ -102,25 +100,6 @@ async def seed_database(reset: bool = False) -> dict[str, int]:
                 is_active=True,
             ))
 
-        for name, role_code in ROLE_DATA:
-            email = f"{role_code.lower()}@fixmycampus.dev"
-            session.add(User(
-                id=stable_id("user", role_code),
-                email=email,
-                password_hash=get_password_hash(DEMO_PASSWORD),
-                full_name=f"Demo {name}",
-                role=role_code,
-                department_id=(
-                    departments["IT"].id
-                    if role_code == "COORDINATOR"
-                    else departments["GENERAL"].id
-                    if role_code == "ADMIN"
-                    else None
-                ),
-                is_active=True,
-                is_verified=True,
-            ))
-
         for category_name, _, department_code in CATEGORY_DATA:
             for priority, (target_hours, escalation_hours) in PRIORITY_SLA.items():
                 session.add(SLARule(
@@ -134,7 +113,7 @@ async def seed_database(reset: bool = False) -> dict[str, int]:
                 ))
 
         await session.commit()
-        return {"roles": len(ROLE_DATA), "departments": len(DEPARTMENT_DATA), "categories": len(CATEGORY_DATA), "users": len(ROLE_DATA), "sla_rules": len(CATEGORY_DATA) * len(PRIORITY_SLA)}
+        return {"roles": len(ROLE_DATA), "departments": len(DEPARTMENT_DATA), "categories": len(CATEGORY_DATA), "sla_rules": len(CATEGORY_DATA) * len(PRIORITY_SLA)}
 
 
 async def main() -> None:
@@ -145,7 +124,7 @@ async def main() -> None:
     print("Seed complete:")
     for name, count in counts.items():
         print(f"  {name}: {count}")
-    print(f"Development demo password for all demo users: {DEMO_PASSWORD}")
+
 
 
 if __name__ == "__main__":

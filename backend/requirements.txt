@@ -8,14 +8,13 @@ python-multipart>=0.0.9
 
 # Database & ORM
 sqlalchemy>=2.0.32,<2.1.0
+greenlet>=3.0.0  # not auto-installed by SQLAlchemy on macOS arm64
 asyncpg>=0.29.0,<0.31.0
 psycopg2-binary>=2.9.9
 alembic>=1.13.2,<1.15.0
 pgvector>=0.3.2,<0.4.0
 
-# Security & Auth (Foundations)
-passlib[bcrypt]>=1.7.4
-bcrypt>=4.0.1,<4.2.0
+# Security & Auth (verifies Supabase Auth tokens)
 python-jose[cryptography]>=3.3.0
 python-dotenv>=1.0.1
 

@@ -13,18 +13,20 @@ import {
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth';
+import type { Role } from '@/lib/api';
 
 export const Navbar: React.FC = () => {
   const location = useLocation();
   const { user, logout } = useAuth();
 
-  const navLinks = [
+  const allLinks: { to: string; label: string; icon: typeof Ticket; badge?: string; roles?: Role[] }[] = [
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/tickets', label: 'Tickets', icon: Ticket },
     { to: '/assistant', label: 'Policy AI', icon: BotMessageSquare, badge: 'RAG' },
-    { to: '/staff', label: 'Staff Desk', icon: UserCheck },
-    { to: '/admin', label: 'Admin', icon: ShieldCheck },
+    { to: '/staff', label: 'Staff Desk', icon: UserCheck, roles: ['STAFF', 'COORDINATOR', 'ADMIN'] },
+    { to: '/admin', label: 'Admin', icon: ShieldCheck, roles: ['ADMIN'] },
   ];
+  const navLinks = user ? allLinks.filter((link) => !link.roles || link.roles.includes(user.role)) : [];
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">

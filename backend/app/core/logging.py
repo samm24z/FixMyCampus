@@ -15,6 +15,9 @@ def setup_logging() -> logging.Logger:
             logging.StreamHandler(sys.stdout)
         ]
     )
+    # Keep our own debug output but silence chatty libraries (they log every network packet).
+    for noisy in ("httpx", "httpcore", "asyncio", "hpack"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     logger = logging.getLogger("fixmycampus")
     logger.setLevel(log_level)
     return logger

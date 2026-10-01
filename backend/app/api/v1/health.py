@@ -24,6 +24,6 @@ async def health_check() -> HealthResponse:
         environment=settings.ENVIRONMENT,
         version="0.1.0",
         database="connected" if db_ok else "disconnected",
-        ai_subsystem="ready",
+        ai_subsystem="not_configured",
         timestamp=datetime.now(timezone.utc).isoformat(),
     )

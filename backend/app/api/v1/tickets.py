@@ -1,268 +1,108 @@
-"""Review-1 ticket, comment, assignment, and status endpoints."""
+"""Ticket endpoints. Business rules live in ``app.services.ticket_service``."""
 
-from datetime import datetime, timezone
+import uuid
 from typing import Annotated, Optional
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_, select
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
-from app.models.department import Department
-from app.models.enums import RoleEnum, TicketStatusEnum
-from app.models.ticket import Ticket, TicketAssignment, TicketComment, TicketStatusHistory
+from app.models.enums import PriorityEnum, TicketStatusEnum
 from app.models.user import User
-from app.schemas.comment import CommentRead
-from app.schemas.assignment import AssignmentRead
-from app.schemas.status_history import StatusHistoryRead
-from app.schemas.ticket import TicketCreate, TicketRead, TicketUpdate
-from app.schemas.ticket_detail import (
-    DashboardSummary,
-    TicketAssignmentRequest,
-    TicketCommentRequest,
-    TicketDetailRead,
+from app.schemas.comment import CommentCreate
+from app.schemas.common import PaginatedResponse
+from app.schemas.ticket import (
+    TicketCreate,
+    TicketFilter,
+    TicketRead,
+    TicketReopenRequest,
+    TicketStatusChange,
+    TicketTriageUpdate,
 )
+from app.schemas.ticket_detail import DashboardSummary, TicketAssignmentRequest, TicketDetailRead
+from app.services import ticket_service
 
 
 router = APIRouter(prefix="/tickets")
-STAFF_ROLES = {RoleEnum.STAFF.value, RoleEnum.COORDINATOR.value, RoleEnum.ADMIN.value}
-TRIAGE_ROLES = {RoleEnum.COORDINATOR.value, RoleEnum.ADMIN.value}
 
-
-def is_admin(user: User) -> bool:
-    return user.role == RoleEnum.ADMIN.value
-
-
-def can_view_ticket(user: User, ticket: Ticket) -> bool:
-    if is_admin(user):
-        return True
-    if user.role in {RoleEnum.STUDENT.value, RoleEnum.FACULTY.value}:
-        return ticket.created_by == user.id
-    if user.role == RoleEnum.STAFF.value:
-        return ticket.assigned_to == user.id or (
-            user.department_id is not None and ticket.confirmed_department_id == user.department_id
-        )
-    if user.role == RoleEnum.COORDINATOR.value:
-        return ticket.confirmed_department_id is None or (
-            user.department_id is not None and ticket.confirmed_department_id == user.department_id
-        )
-    return False
-
-
-def can_comment(user: User, ticket: Ticket) -> bool:
-    return can_view_ticket(user, ticket) or (
-        user.role in STAFF_ROLES and ticket.assigned_to == user.id
-    )
-
-
-async def get_ticket(db: AsyncSession, ticket_ref: str) -> Ticket:
-    query = select(Ticket).options(
-        selectinload(Ticket.creator),
-        selectinload(Ticket.assignee),
-        selectinload(Ticket.confirmed_department),
-        selectinload(Ticket.comments),
-        selectinload(Ticket.status_history),
-        selectinload(Ticket.assignments),
-    )
-    try:
-        ticket_id = UUID(ticket_ref)
-        query = query.where(Ticket.id == ticket_id)
-    except ValueError:
-        query = query.where(Ticket.ticket_number == ticket_ref)
-    ticket = await db.scalar(query)
-    if ticket is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
-    return ticket
-
-
-def ticket_number(number: int) -> str:
-    return f"TICK-{datetime.now(timezone.utc).year}-{number:04d}"
-
-
-def detail_response(ticket: Ticket) -> TicketDetailRead:
-    return TicketDetailRead(
-        **TicketRead.model_validate(ticket).model_dump(),
-        created_by_name=ticket.creator.full_name,
-        assigned_to_name=ticket.assignee.full_name if ticket.assignee else None,
-        department_name=ticket.confirmed_department.name if ticket.confirmed_department else None,
-        comments=[CommentRead.model_validate(comment) for comment in sorted(ticket.comments, key=lambda item: item.created_at)],
-        history=[StatusHistoryRead.model_validate(history) for history in sorted(ticket.status_history, key=lambda item: item.created_at)],
-        assignments=[AssignmentRead.model_validate(assignment) for assignment in sorted(ticket.assignments, key=lambda item: item.created_at)],
-    )
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
 @router.get("/summary", response_model=DashboardSummary)
-async def dashboard_summary(
-    db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> DashboardSummary:
-    tickets = await list_visible_tickets(db, current_user)
-    resolved = sum(ticket.status in {TicketStatusEnum.RESOLVED.value, TicketStatusEnum.CLOSED.value} for ticket in tickets)
-    return DashboardSummary(
-        total_tickets=len(tickets),
-        open_tickets=len(tickets) - resolved,
-        resolved_tickets=resolved,
-        recent_tickets=[TicketRead.model_validate(ticket) for ticket in tickets[:5]],
-    )
+async def dashboard_summary(db: DbSession, current_user: CurrentUser) -> DashboardSummary:
+    return await ticket_service.dashboard_summary(db, current_user)
 
 
-async def list_visible_tickets(db: AsyncSession, current_user: User, search: Optional[str] = None) -> list[Ticket]:
-    query = select(Ticket).order_by(Ticket.created_at.desc())
-    if current_user.role in {RoleEnum.STUDENT.value, RoleEnum.FACULTY.value}:
-        query = query.where(Ticket.created_by == current_user.id)
-    elif current_user.role == RoleEnum.STAFF.value:
-        query = query.where(or_(Ticket.assigned_to == current_user.id, Ticket.confirmed_department_id == current_user.department_id))
-    elif current_user.role == RoleEnum.COORDINATOR.value:
-        query = query.where(
-            or_(
-                Ticket.confirmed_department_id.is_(None),
-                Ticket.confirmed_department_id == current_user.department_id,
-            )
-        )
-    if search:
-        pattern = f"%{search}%"
-        query = query.where(or_(Ticket.title.ilike(pattern), Ticket.description.ilike(pattern), Ticket.ticket_number.ilike(pattern)))
-    result = await db.scalars(query)
-    return list(result.all())
-
-
-@router.get("", response_model=list[TicketRead])
+@router.get("", response_model=PaginatedResponse[TicketRead])
 async def list_tickets(
-    db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
-    search: Optional[str] = Query(default=None),
+    db: DbSession,
+    current_user: CurrentUser,
+    search: Optional[str] = Query(default=None, max_length=100),
     ticket_status: Optional[TicketStatusEnum] = Query(default=None, alias="status"),
-) -> list[TicketRead]:
-    tickets = await list_visible_tickets(db, current_user, search)
-    if ticket_status:
-        tickets = [ticket for ticket in tickets if ticket.status == ticket_status.value]
-    return [TicketRead.model_validate(ticket) for ticket in tickets]
-
-
-@router.post("", response_model=TicketRead, status_code=status.HTTP_201_CREATED)
-async def create_ticket(
-    payload: TicketCreate,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> Ticket:
-    count = await db.scalar(select(func.count()).select_from(Ticket))
-    ticket = Ticket(
-        ticket_number=ticket_number((count or 0) + 1),
-        title=payload.title,
-        description=payload.description,
-        category=payload.category,
-        priority=payload.priority.value,
-        location=payload.location,
-        status=TicketStatusEnum.NEW.value,
-        created_by=current_user.id,
-        ai_confidence=None,
+    category: Optional[str] = Query(default=None, max_length=100),
+    priority: Optional[PriorityEnum] = Query(default=None),
+    department_id: Optional[uuid.UUID] = Query(default=None),
+    assigned_to: Optional[uuid.UUID] = Query(default=None),
+    mine: bool = Query(default=False, description="Only tickets I reported"),
+    open_only: bool = Query(default=False, description="Exclude RESOLVED and CLOSED tickets"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+) -> PaginatedResponse[TicketRead]:
+    filters = TicketFilter(
+        status=ticket_status, category=category, priority=priority, department_id=department_id,
+        assigned_to=assigned_to, search=search, mine=mine, open_only=open_only,
     )
-    db.add(ticket)
-    await db.flush()
-    db.add(TicketStatusHistory(ticket_id=ticket.id, changed_by=current_user.id, to_status=TicketStatusEnum.NEW.value))
-    await db.commit()
-    await db.refresh(ticket)
-    return ticket
+    tickets, total, total_pages = await ticket_service.list_tickets(db, current_user, filters, page, page_size)
+    return PaginatedResponse[TicketRead](
+        items=[TicketRead.model_validate(ticket) for ticket in tickets],
+        total=total, page=page, page_size=page_size, total_pages=total_pages,
+    )
+
+
+@router.post("", response_model=TicketDetailRead, status_code=status.HTTP_201_CREATED)
+async def create_ticket(payload: TicketCreate, db: DbSession, current_user: CurrentUser) -> TicketDetailRead:
+    return await ticket_service.create_ticket(db, current_user, payload)
 
 
 @router.get("/{ticket_ref}", response_model=TicketDetailRead)
-async def read_ticket(
-    ticket_ref: str,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+async def read_ticket(ticket_ref: str, db: DbSession, current_user: CurrentUser) -> TicketDetailRead:
+    ticket = await ticket_service.get_ticket_for_user(db, current_user, ticket_ref)
+    return ticket_service.build_detail(ticket, current_user)
+
+
+@router.patch("/{ticket_ref}", response_model=TicketDetailRead)
+async def update_triage(
+    ticket_ref: str, payload: TicketTriageUpdate, db: DbSession, current_user: CurrentUser
 ) -> TicketDetailRead:
-    ticket = await get_ticket(db, ticket_ref)
-    if not can_view_ticket(current_user, ticket):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You cannot view this ticket")
-    return detail_response(ticket)
+    """Coordinator/admin edits to category, priority, department, or SLA deadline."""
+    return await ticket_service.update_triage(db, current_user, ticket_ref, payload)
 
 
-@router.post("/{ticket_ref}/comments", response_model=CommentRead, status_code=status.HTTP_201_CREATED)
-async def add_comment(
-    ticket_ref: str,
-    payload: TicketCommentRequest,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> TicketComment:
-    ticket = await get_ticket(db, ticket_ref)
-    if not can_comment(current_user, ticket):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You cannot comment on this ticket")
-    comment = TicketComment(ticket_id=ticket.id, user_id=current_user.id, content=payload.content, is_internal=payload.is_internal)
-    db.add(comment)
-    await db.commit()
-    await db.refresh(comment)
-    return comment
+@router.post("/{ticket_ref}/status", response_model=TicketDetailRead)
+async def change_status(
+    ticket_ref: str, payload: TicketStatusChange, db: DbSession, current_user: CurrentUser
+) -> TicketDetailRead:
+    return await ticket_service.change_status(db, current_user, ticket_ref, payload)
 
 
-@router.post("/{ticket_ref}/reopen", response_model=TicketRead)
-async def reopen_ticket(
-    ticket_ref: str,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> Ticket:
-    ticket = await get_ticket(db, ticket_ref)
-    if ticket.created_by != current_user.id or current_user.role not in {RoleEnum.STUDENT.value, RoleEnum.FACULTY.value}:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the reporter can reopen this ticket")
-    if ticket.status not in {TicketStatusEnum.RESOLVED.value, TicketStatusEnum.CLOSED.value}:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only resolved or closed tickets can be reopened")
-    old_status = ticket.status
-    ticket.status = TicketStatusEnum.REOPENED.value
-    ticket.reopened_at = datetime.now(timezone.utc)
-    db.add(TicketStatusHistory(ticket_id=ticket.id, changed_by=current_user.id, from_status=old_status, to_status=ticket.status))
-    await db.commit()
-    await db.refresh(ticket)
-    return ticket
-
-
-@router.patch("/{ticket_ref}", response_model=TicketRead)
-async def update_ticket(
-    ticket_ref: str,
-    payload: TicketUpdate,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> Ticket:
-    ticket = await get_ticket(db, ticket_ref)
-    if current_user.role not in TRIAGE_ROLES and not (current_user.role == RoleEnum.STAFF.value and ticket.assigned_to == current_user.id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You cannot update this ticket")
-    changes = payload.model_dump(exclude_unset=True)
-    if current_user.role == RoleEnum.STAFF.value:
-        changes = {key: value for key, value in changes.items() if key in {"status"}}
-    old_status = ticket.status
-    for field, value in changes.items():
-        if hasattr(ticket, field):
-            setattr(ticket, field, value.value if hasattr(value, "value") else value)
-    if "status" in changes and ticket.status != old_status:
-        db.add(TicketStatusHistory(ticket_id=ticket.id, changed_by=current_user.id, from_status=old_status, to_status=ticket.status))
-        if ticket.status == TicketStatusEnum.RESOLVED.value:
-            ticket.resolved_at = datetime.now(timezone.utc)
-    await db.commit()
-    await db.refresh(ticket)
-    return ticket
-
-
-@router.post("/{ticket_ref}/assign", response_model=TicketRead)
+@router.post("/{ticket_ref}/assign", response_model=TicketDetailRead)
 async def assign_ticket(
-    ticket_ref: str,
-    payload: TicketAssignmentRequest,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> Ticket:
-    ticket = await get_ticket(db, ticket_ref)
-    if current_user.role not in TRIAGE_ROLES:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only coordinators and admins can assign tickets")
-    assignee = await db.scalar(select(User).where(User.id == payload.assigned_to, User.is_active.is_(True)))
-    if assignee is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignee not found")
-    previous_status = ticket.status
-    ticket.assigned_to = assignee.id
-    ticket.confirmed_department_id = payload.department_id or assignee.department_id
-    ticket.status = TicketStatusEnum.ASSIGNED.value
-    db.add(TicketAssignment(ticket_id=ticket.id, assigned_by=current_user.id, assigned_to=assignee.id, department_id=ticket.confirmed_department_id, notes=payload.notes))
-    if previous_status != TicketStatusEnum.ASSIGNED.value:
-        db.add(TicketStatusHistory(ticket_id=ticket.id, changed_by=current_user.id, from_status=previous_status, to_status=ticket.status))
-    await db.commit()
-    await db.refresh(ticket)
-    return ticket
+    ticket_ref: str, payload: TicketAssignmentRequest, db: DbSession, current_user: CurrentUser
+) -> TicketDetailRead:
+    return await ticket_service.assign_ticket(db, current_user, ticket_ref, payload)
+
+
+@router.post("/{ticket_ref}/comments", response_model=TicketDetailRead, status_code=status.HTTP_201_CREATED)
+async def add_comment(
+    ticket_ref: str, payload: CommentCreate, db: DbSession, current_user: CurrentUser
+) -> TicketDetailRead:
+    return await ticket_service.add_comment(db, current_user, ticket_ref, payload)
+
+
+@router.post("/{ticket_ref}/reopen", response_model=TicketDetailRead)
+async def reopen_ticket(
+    ticket_ref: str, payload: TicketReopenRequest, db: DbSession, current_user: CurrentUser
+) -> TicketDetailRead:
+    return await ticket_service.reopen_ticket(db, current_user, ticket_ref, payload)

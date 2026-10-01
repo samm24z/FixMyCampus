@@ -34,12 +34,13 @@ class Role(Base, UUIDMixin, TimestampMixin):
 
 
 class User(Base, UUIDMixin, TimestampMixin):
-    """User account model."""
+    """Application profile of a Supabase Auth account (``id`` equals the Supabase user id).
+
+    Credentials live in Supabase; this table holds the role, department and active flag."""
 
     __tablename__ = "users"
 
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(150), nullable=False)
     role: Mapped[RoleEnum] = mapped_column(String(50), default=RoleEnum.STUDENT, index=True, nullable=False)
     

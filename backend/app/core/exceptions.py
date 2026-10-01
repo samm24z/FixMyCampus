@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.logging import logger
 
 
@@ -65,6 +66,22 @@ class ForbiddenException(AppException):
         )
 
 
+class UnprocessableException(AppException):
+    """Request is well-formed but violates a business rule."""
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+        super().__init__(
+            message=message,
+            status_code=422,
+            error_code="UNPROCESSABLE",
+            details=details,
+        )
+
+
+def _safe_validation_errors(errors: list[dict]) -> list[dict]:
+    """Keep only location/message/type: raw errors can hold exception objects and the submitted input."""
+    return [{"loc": list(e.get("loc", [])), "msg": e.get("msg", ""), "type": e.get("type", "")} for e in errors]
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """Register centralized FastAPI exception handlers."""
 
@@ -83,17 +100,34 @@ def register_exception_handlers(app: FastAPI) -> None:
             },
         )
 
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+        # Keep FastAPI's own errors (401 from OAuth2, 404 routes, ...) in the same envelope.
+        return JSONResponse(
+            status_code=exc.status_code,
+            headers=getattr(exc, "headers", None),
+            content={
+                "success": False,
+                "error": {
+                    "code": f"HTTP_{exc.status_code}",
+                    "message": str(exc.detail),
+                    "details": {},
+                }
+            },
+        )
+
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError):
-        logger.warning(f"Validation error on {request.method} {request.url.path}: {exc.errors()}")
+        errors = _safe_validation_errors(exc.errors())
+        logger.warning(f"Validation error on {request.method} {request.url.path}: {errors}")
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             content={
                 "success": False,
                 "error": {
                     "code": "VALIDATION_ERROR",
                     "message": "Invalid request parameters or payload.",
-                    "details": exc.errors(),
+                    "details": errors,
                 }
             },
         )

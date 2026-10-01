@@ -4,7 +4,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
-from app.core.config import settings
+from app.core.config import asyncpg_connect_args, settings
 from app.models.base import Base
 import app.models  # noqa: F401
 
@@ -18,7 +18,8 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Set the SQLAlchemy URL from our application settings
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# '%' must be escaped because Alembic runs the URL through ConfigParser interpolation
+config.set_main_option("sqlalchemy.url", settings.alembic_database_url.replace("%", "%%"))
 
 target_metadata = Base.metadata
 
@@ -61,6 +62,7 @@ async def run_async_migrations() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=asyncpg_connect_args(settings.alembic_database_url),
     )
 
     async with connectable.connect() as connection:

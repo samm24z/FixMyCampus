@@ -10,5 +10,5 @@ class HealthResponse(BaseModel):
     environment: str = Field(..., description="Active environment name")
     version: str = Field("0.1.0", description="API version")
     database: str = Field("unknown", description="Database connectivity status: 'connected' or 'disconnected'")
-    ai_subsystem: str = Field("ready", description="AI subsystem status")
+    ai_subsystem: str = Field("not_configured", description="AI subsystem status")
     timestamp: str = Field(..., description="Server ISO timestamp")

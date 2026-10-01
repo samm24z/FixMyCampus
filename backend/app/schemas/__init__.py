@@ -1,13 +1,12 @@
 """Schemas package exports."""
 
 from app.schemas.common import APIResponse, PaginationParams, PaginatedResponse
-from app.schemas.auth import Token, TokenPayload, LoginRequest, RegisterRequest, RefreshTokenRequest
 from app.schemas.user import RoleBase, RoleCreate, RoleRead, UserBase, UserCreate, UserUpdate, UserRead
 from app.schemas.department import (
     DepartmentBase, DepartmentCreate, DepartmentUpdate, DepartmentRead,
     CategoryBase, CategoryCreate, CategoryRead
 )
-from app.schemas.ticket import TicketBase, TicketCreate, TicketUpdate, TicketRead, TicketFilter, TicketSummary
+from app.schemas.ticket import TicketBase, TicketCreate, TicketTriageUpdate, TicketStatusChange, TicketReopenRequest, TicketRead, TicketFilter, TicketSummary
 from app.schemas.comment import CommentCreate, CommentRead
 from app.schemas.attachment import AttachmentCreate, AttachmentRead
 from app.schemas.status_history import StatusChangeRequest, StatusHistoryRead
@@ -29,11 +28,6 @@ __all__ = [
     "APIResponse",
     "PaginationParams",
     "PaginatedResponse",
-    "Token",
-    "TokenPayload",
-    "LoginRequest",
-    "RegisterRequest",
-    "RefreshTokenRequest",
     "RoleBase",
     "RoleCreate",
     "RoleRead",
@@ -50,7 +44,9 @@ __all__ = [
     "CategoryRead",
     "TicketBase",
     "TicketCreate",
-    "TicketUpdate",
+    "TicketTriageUpdate",
+    "TicketStatusChange",
+    "TicketReopenRequest",
     "TicketRead",
     "TicketFilter",
     "TicketSummary",

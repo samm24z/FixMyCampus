@@ -1,5 +1,35 @@
 # Current Project State
 
+## Update 2026-09-30: authentication delegated to Supabase Auth
+
+- Sign-up, email confirmation, login, password reset and token refresh are now done by Supabase Auth from the browser (`supabase-js`). The backend only verifies the ES256 token against the project's published keys (`app/core/security.py`; HS256 only if `SUPABASE_JWT_SECRET` is set) and keeps authorization in its own database.
+- `users.id` equals the Supabase user id; `users.password_hash` was dropped (migration `20260930_0004`). The first request from a new Supabase account provisions a STUDENT/FACULTY profile; elevated roles are admin-granted only and never read from the token.
+- Removed endpoints: `/auth/login`, `/auth/register`, `/auth/refresh`. Kept: `GET /auth/me`. Admin user creation and deactivation call the Supabase admin API (`app/services/supabase_admin.py`); deactivation also bans the account at Supabase.
+- New scripts: `create_admin.py` (promote a signed-up account, or create one), `seed_demo_users.py`; `seed_database.py` now seeds reference data only.
+- Frontend: `lib/supabase.ts`, rewritten `lib/auth.tsx`, "check your email" step on register, forgot-password and `/reset-password`. Needs `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+- Tests mint their own tokens (no Supabase needed): 85 backend tests incl. ES256/JWKS, forged/expired/wrong-audience tokens and provisioning rules.
+- **Not yet exercised end to end against the real project** (needs the anon and secret keys in the `.env` files); the live signing-key fetch and forged-token rejection were checked against the real project.
+
+## Update 2026-09-29: RBAC and ticketing cleanup
+
+The sections below are the 2026-09-27 audit. Where they conflict with this section, this section wins.
+
+**Done**
+- **Central RBAC policy**: `backend/app/core/permissions.py` is the single source of truth for role sets, ticket visibility (SQL filter and Python check, tested to agree) and the status state machine.
+- **Service layer**: `backend/app/services/ticket_service.py` holds every ticket rule; routers are thin. Status changes, assignments, triage edits, creates and user changes are written to `audit_logs`.
+- **Ticket API** (all return the refreshed ticket, including a server-computed `permissions` object the UI renders from): `GET /tickets` (server-side filters, search, pagination, `open_only`), `GET /tickets/summary`, `POST /tickets`, `GET /tickets/{ref}`, `PATCH /tickets/{ref}` (triage: category/priority/department/SLA), `POST /tickets/{ref}/status`, `/assign`, `/comments`, `/reopen`. Status is no longer editable through PATCH.
+- **User/department API**: `GET/POST /users`, `PATCH /users/{id}` (admin only; cannot demote/deactivate self; staff require a department), `GET /users/staff`, `GET /departments`. The hidden `/auth/directory/*` and `/auth/admin-check` routes were removed.
+- **Fixed**: internal notes leaked to reporters; staff list/detail visibility disagreed (department-less staff matched `IS NULL`); ticket numbers used `count+1` (now a DB sequence, migration `20260929_0002`); no status state machine; validation errors logged/echoed submitted input (incl. passwords) and crashed on custom validators; SQL echo printed password hashes; `greenlet` missing on macOS arm64.
+- **Hosted DB readiness**: Supabase/Neon-safe URL handling (Supabase chosen), row-level security migration `20260929_0003`, `MIGRATION_DATABASE_URL`, production secret guard, non-reload Docker CMD honouring `$PORT`, `.dockerignore`, `scripts/create_admin.py`, `seed_database.py --no-demo-users`. See `docs/DEPLOYMENT.md`.
+- **Frontend**: `src/lib/{api,auth,utils}` were never committed (a Python-template `lib/` rule in `.gitignore` swallowed them) and have been rewritten, now with silent access-token refresh; role-aware navigation; ticket detail driven by `permissions`; paginated ticket list; admin user management UI.
+- **Tests** (at the time; now 85): 66 backend tests run against a real, freshly migrated PostgreSQL test database (`fixmycampus_test`); 4 AI mock tests; 6 frontend unit tests. Frontend `tsc` and `vite build` pass.
+
+**Design decisions to revisit**: coordinators see all tickets (previously department-scoped, which stranded a ticket once assigned to another department); tickets a user may not see return 404, not 403; any role may reopen its own resolved ticket.
+
+**Still not done**: attachments, feedback, notifications, department/category CRUD, refresh-token revocation, rate limiting, and all real AI (classification, embeddings/dedupe, RAG, the agent chatbot). `backend/app/repositories/` is unused dead code superseded by the services. Not yet exercised against a real Supabase project.
+
+---
+
 Audit date: 2026-09-27
 
 This audit records repository evidence only. `PROJECT_ARCHITECTURE.md` is treated as a target specification, not proof that a feature exists.

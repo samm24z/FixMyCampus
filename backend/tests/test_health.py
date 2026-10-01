@@ -25,7 +25,7 @@ async def test_health_endpoint_root(async_client: AsyncClient):
     assert "version" in data
     assert "environment" in data
     assert "database" in data
-    assert data["ai_subsystem"] == "ready"
+    assert data["ai_subsystem"] == "not_configured"
 
 
 @pytest.mark.asyncio

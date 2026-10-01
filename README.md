@@ -36,11 +36,13 @@ fixmycampus-ai/
 └── docker-compose.yml    # Development multi-container orchestration
 ```
 
-For detailed architecture diagrams, database ERDs, API boundaries, and security models, see [PROJECT_ARCHITECTURE.md](file:///c:/Users/abdus/Desktop/FixMyCampus/PROJECT_ARCHITECTURE.md).
+For detailed architecture diagrams, database ERDs, API boundaries, and security models, see [PROJECT_ARCHITECTURE.md](PROJECT_ARCHITECTURE.md).
 
 ---
 
 ## 🚀 Quick Start Guide
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) to host the database, backend and frontend so the app works from any device.
 
 ### Option 1: Docker Compose (Recommended)
 
@@ -122,10 +124,10 @@ npm test
 
 ## 🛣️ Project Phases Roadmap
 
-- [x] **Phase 0: Project Foundation** *(Current)*
-- [ ] **Phase 1: Database Models, Migrations & Synthetic Seed Data**
-- [ ] **Phase 2: Authentication, Security & RBAC Engine**
-- [ ] **Phase 3: Core Complaint Lifecycle & State Machine**
+- [x] **Phase 0: Project Foundation**
+- [x] **Phase 1: Database Models, Migrations & Synthetic Seed Data**
+- [x] **Phase 2: Authentication, Security & RBAC Engine**
+- [x] **Phase 3: Core Complaint Lifecycle & State Machine** *(attachments, feedback, notifications pending)*
 - [ ] **Phase 4: AI Classifier, Priority Engine & Deduplication**
 - [ ] **Phase 5: Coordinator Triage Workbench & Override System**
 - [ ] **Phase 6: Policy RAG Assistant with Grounded Citations**

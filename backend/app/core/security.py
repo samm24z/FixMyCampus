@@ -1,50 +1,87 @@
-"""Security, password hashing, and token utilities."""
+"""Verification of Supabase Auth access tokens.
 
-from datetime import datetime, timedelta, timezone
-from typing import Any, Optional, Union
+Supabase issues and refreshes the tokens; this module only checks them. Modern projects sign
+with asymmetric keys (ES256/RS256) published as a JWKS document, so no shared secret is needed.
+HS256 is accepted only when ``SUPABASE_JWT_SECRET`` is configured (legacy projects, tests), and
+the algorithm named in the token header can never select a different kind of key.
+"""
+
+import time
+from typing import Any, Optional
+
+import httpx
 from jose import jwt
 from jose.exceptions import JWTError
-from passlib.context import CryptContext
+
 from app.core.config import settings
+from app.core.logging import logger
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-ALGORITHM = "HS256"
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plain password against a bcrypt hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+JWKS_TTL_SECONDS = 600
+JWKS_MIN_REFETCH_SECONDS = 60  # unknown key id => refetch once, but never hammer Supabase
+ASYMMETRIC_ALGORITHMS = {"ES256", "RS256"}
 
 
-def get_password_hash(password: str) -> str:
-    """Generate bcrypt hash for given password."""
-    return pwd_context.hash(password)
+class AuthError(Exception):
+    """The presented token is missing, malformed, expired, or not issued by our Supabase project."""
 
 
-def create_access_token(
-    subject: Union[str, Any], expires_delta: Optional[timedelta] = None
-) -> str:
-    """Generate a signed JWT access token."""
-    return create_token(subject, "access", expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
+class SupabaseTokenVerifier:
+    def __init__(self) -> None:
+        self._keys: dict[str, dict[str, Any]] = {}
+        self._fetched_at = 0.0
+
+    async def _fetch_jwks(self) -> list[dict[str, Any]]:
+        url = f"{settings.supabase_issuer}/.well-known/jwks.json"
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            return response.json().get("keys", [])
+
+    async def _refresh_keys(self) -> None:
+        try:
+            keys = await self._fetch_jwks()
+        except Exception as exc:  # network error, Supabase paused, bad JSON ...
+            logger.error(f"Could not fetch Supabase signing keys: {exc}")
+            raise AuthError("Signing keys unavailable") from exc
+        self._keys = {key["kid"]: key for key in keys if "kid" in key}
+        self._fetched_at = time.monotonic()
+
+    async def _signing_key(self, kid: Optional[str]) -> dict[str, Any]:
+        age = time.monotonic() - self._fetched_at
+        if not self._keys or age > JWKS_TTL_SECONDS:
+            await self._refresh_keys()
+        if kid not in self._keys and time.monotonic() - self._fetched_at > JWKS_MIN_REFETCH_SECONDS:
+            await self._refresh_keys()  # the project may have rotated its keys
+        if kid not in self._keys:
+            raise AuthError("Unknown signing key")
+        return self._keys[kid]
+
+    async def verify(self, token: str) -> dict[str, Any]:
+        """Return the verified claims of ``token`` or raise ``AuthError``."""
+        if not settings.SUPABASE_URL:
+            logger.error("SUPABASE_URL is not configured; every authenticated request will be rejected")
+            raise AuthError("Authentication is not configured")
+        try:
+            header = jwt.get_unverified_header(token)
+            algorithm = header.get("alg")
+            if algorithm == "HS256" and settings.SUPABASE_JWT_SECRET:
+                key: Any = settings.SUPABASE_JWT_SECRET
+            elif algorithm in ASYMMETRIC_ALGORITHMS:
+                key = await self._signing_key(header.get("kid"))
+            else:
+                raise AuthError("Unsupported token algorithm")
+            claims = jwt.decode(
+                token,
+                key,
+                algorithms=[algorithm],
+                audience=settings.SUPABASE_JWT_AUDIENCE,
+                issuer=settings.supabase_issuer,
+            )
+        except JWTError as exc:
+            raise AuthError(str(exc)) from exc
+        if not claims.get("sub"):
+            raise AuthError("Token has no subject")
+        return claims
 
 
-def create_refresh_token(subject: Union[str, Any]) -> str:
-    """Generate a signed stateless refresh token."""
-    return create_token(subject, "refresh", timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS))
-
-
-def create_token(subject: Union[str, Any], token_type: str, expires_delta: timedelta) -> str:
-    """Generate a signed JWT with an explicit token type."""
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    to_encode = {"exp": expire, "sub": str(subject), "type": token_type}
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-
-def decode_token(token: str, expected_type: str = "access") -> dict[str, Any]:
-    """Decode and validate a token issued by this application."""
-    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
-    if payload.get("type") != expected_type or not payload.get("sub"):
-        raise JWTError("Invalid token type or subject")
-    return payload
+token_verifier = SupabaseTokenVerifier()

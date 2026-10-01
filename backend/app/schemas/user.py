@@ -54,3 +54,20 @@ class UserRead(UserBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AdminUserCreate(BaseModel):
+    """Admin-created account (any role); the user should change the password after first login."""
+    email: EmailStr
+    full_name: str = Field(..., min_length=2, max_length=150)
+    password: str = Field(..., min_length=8)
+    role: RoleEnum
+    department_id: Optional[uuid.UUID] = None
+    phone_number: Optional[str] = Field(None, max_length=30)
+
+
+class AdminUserUpdate(BaseModel):
+    """Admin edits to role, department, and active flag."""
+    role: Optional[RoleEnum] = None
+    department_id: Optional[uuid.UUID] = None
+    is_active: Optional[bool] = None

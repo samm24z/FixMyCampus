@@ -8,14 +8,16 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy import text
-from app.core.config import settings
+from app.core.config import asyncpg_connect_args, settings
 
 # Create Async Engine
 engine: AsyncEngine = create_async_engine(
     settings.DATABASE_URL,
-    echo=settings.DEBUG,
+    echo=settings.DB_ECHO,
     future=True,
     pool_pre_ping=True,
+    pool_recycle=300,  # hosted Postgres (e.g. Neon) drops idle connections
+    connect_args=asyncpg_connect_args(settings.DATABASE_URL),
 )
 
 # Create Async Session Factory

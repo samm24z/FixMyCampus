@@ -20,4 +20,6 @@ COPY ai /app/ai
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Production default: no reload, and honour $PORT (Render/Railway/Fly inject it).
+# docker-compose overrides this with --reload for local development.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
