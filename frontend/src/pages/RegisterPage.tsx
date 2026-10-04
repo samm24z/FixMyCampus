@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfigBanner } from '@/components/auth/ConfigBanner';
 import { getApiError, roleHome, useAuth } from '@/lib/auth';
+import { CAMPUS, EMAIL_HINT, isCampusEmail } from '@/lib/campus';
 
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
@@ -18,6 +19,10 @@ export const RegisterPage: React.FC = () => {
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError('');
+    if (!isCampusEmail(form.email)) {
+      setError(`Please use your ${CAMPUS.shortName} college email address (${EMAIL_HINT}).`);
+      return;
+    }
     setIsSubmitting(true);
     try {
       const result = await register(form);
@@ -58,9 +63,9 @@ export const RegisterPage: React.FC = () => {
           <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-2">
             <UserPlus className="w-6 h-6" />
           </div>
-          <CardTitle className="text-2xl font-bold">Create Campus Account</CardTitle>
+          <CardTitle className="text-2xl font-bold">Create your MVSR account</CardTitle>
           <CardDescription>
-            Register as a Student or Faculty member. Staff accounts are created by an administrator.
+            Open to {CAMPUS.name} students and faculty with a @{CAMPUS.emailDomain} email. Staff accounts are created by an administrator.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -82,12 +87,12 @@ export const RegisterPage: React.FC = () => {
             </div>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Campus Email</label>
+            <label className="text-sm font-medium">College Email</label>
             <div className="relative">
               <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <input
                 type="email"
-                placeholder="alex.morgan@campus.edu"
+                placeholder={EMAIL_HINT}
                 className="w-full pl-9 pr-4 py-2 border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 value={form.email}
                 onChange={(event) => setForm({ ...form, email: event.target.value })}
@@ -139,7 +144,7 @@ export const RegisterPage: React.FC = () => {
             </Link>
           </div>
           <Badge variant="outline" className="text-[11px] text-muted-foreground">
-            Student and faculty registration
+            {CAMPUS.name} email addresses only
           </Badge>
         </CardFooter>
       </Card>

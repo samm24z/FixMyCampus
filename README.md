@@ -1,7 +1,7 @@
 # FixMyCampus AI
 
 > **FixMyCampus AI: An Intelligent Campus Grievance Classification, Deduplication and Resolution Platform**  
-> *Final-Year Engineering Project &bull; Full-Stack + Generative AI*
+> *Final-Year Engineering Project &bull; Full-Stack + Generative AI &bull; MVSR Engineering College*
 
 ---
 

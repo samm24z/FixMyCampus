@@ -1,5 +1,14 @@
 # Current Project State
 
+## Update 2026-10-04: college tailoring and sign-up restriction
+
+- Sign-up is limited to `@mvsrec.edu.in` (MVSR Engineering College) in three layers: register form (`frontend/src/lib/campus.ts`), backend (`ALLOWED_EMAIL_DOMAINS`, exact-domain match, 403 with a clear message; look-alike, sub-domain and malformed addresses refused) and a Supabase "Before User Created" hook (`docs/supabase/restrict_signup_domain.sql`, function installed; must be switched on in the dashboard).
+- Existing profiles and admin-created accounts are exempt from the backend rule, so the original admin account is unaffected.
+- Branding now reads "MVSR Engineering College" (navbar, footer, login/register, page title). College settings live in `frontend/src/lib/campus.ts`.
+- Fixed while testing: a malformed email without `@` passed the first version of the domain check; one-character email names crashed first-login profile creation.
+- 97 backend tests, 9 frontend tests.
+- Not yet tailored: the seeded departments and complaint categories are generic, not MVSR's real departments/blocks.
+
 ## Update 2026-09-30: authentication delegated to Supabase Auth
 
 - Sign-up, email confirmation, login, password reset and token refresh are now done by Supabase Auth from the browser (`supabase-js`). The backend only verifies the ES256 token against the project's published keys (`app/core/security.py`; HS256 only if `SUPABASE_JWT_SECRET` is set) and keeps authorization in its own database.

@@ -53,7 +53,13 @@ against local Docker Postgres (`fixmycampus_test`) and refuses any database whos
 2. **Authentication → Sign In / Providers → Email:** keep **Confirm email** on. Free-tier email is
    throttled to a few messages an hour, so create demo accounts ahead of a review (the admin page and
    `seed_demo_users.py` create pre-confirmed accounts that send no email).
-3. **Project Settings → API Keys:** copy the **anon / publishable** key (public; goes in
+3. **Authentication → Hooks → Before User Created:** restricts sign-up to `@mvsrec.edu.in` at the source,
+   so nobody can bypass the website and sign up with another address. Run
+   `docs/supabase/restrict_signup_domain.sql` once in **SQL Editor** (already done for this project),
+   then in the dashboard choose **Add hook → Postgres function → `public.hook_restrict_signup_domain`**
+   and save. If you change the allowed domain, edit it in that SQL file, the backend
+   (`ALLOWED_EMAIL_DOMAINS`) and the frontend (`VITE_ALLOWED_EMAIL_DOMAIN`).
+4. **Project Settings → API Keys:** copy the **anon / publishable** key (public; goes in
    `frontend/.env`) and the **secret / service_role** key (server-only; goes in `backend/.env` as
    `SUPABASE_SERVICE_ROLE_KEY`). Never put the secret key in the frontend or commit it.
 
@@ -126,7 +132,9 @@ cd backend && .venv/bin/python -m pytest -q
   admin's role change or deactivation takes effect immediately. Deactivating also bans the account
   at Supabase so it cannot sign in or refresh again.
 - Self-signup can only ever produce STUDENT or FACULTY accounts, whatever the sign-up request claims.
-- Any email address can currently register. Before a public launch consider restricting sign-ups to
-  your campus email domain (Supabase: Authentication → Sign In / Providers, or an auth hook).
+- Sign-up is limited to the college email domain in three layers: the register form, the backend
+  (refuses to create a profile for any other domain, so such an account cannot use the app even if it
+  exists in Supabase) and the Supabase hook (refuses to create the account at all). Accounts an admin
+  creates from the Admin page, and profiles that already exist, are exempt from the backend rule.
 - Supabase's login endpoint rate-limits attempts; our own API still has no rate limiting. Add it
   (at the host/proxy or with `slowapi`) before a public launch.

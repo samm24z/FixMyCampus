@@ -106,35 +106,92 @@ async def test_the_old_password_endpoints_are_gone(async_client):
 
 async def test_first_login_creates_a_student_profile(async_client, auth_headers):
     new_id = uuid.uuid4()
-    headers = auth_headers(new_id, "Fresh.Student@campus.edu", user_metadata={"full_name": "Fresh Student"})
+    headers = auth_headers(new_id, "Fresh.Student@MVSREC.edu.in", user_metadata={"full_name": "Fresh Student"})
     response = await async_client.get("/api/v1/auth/me", headers=headers)
     assert response.status_code == 200
     body = response.json()
     assert body["id"] == str(new_id) and body["role"] == "STUDENT"
-    assert body["email"] == "fresh.student@campus.edu" and body["full_name"] == "Fresh Student"
+    assert body["email"] == "fresh.student@mvsrec.edu.in" and body["full_name"] == "Fresh Student"
     assert (await async_client.get("/api/v1/auth/me", headers=headers)).json()["id"] == str(new_id)  # no duplicate
 
 
 async def test_self_signup_may_pick_faculty_but_never_anything_higher(async_client, auth_headers):
     faculty = await async_client.get("/api/v1/auth/me", headers=auth_headers(
-        uuid.uuid4(), "prof@campus.edu", user_metadata={"role": "FACULTY"}))
+        uuid.uuid4(), "prof@mvsrec.edu.in", user_metadata={"role": "FACULTY"}))
     assert faculty.json()["role"] == "FACULTY"
     for sneaky in ("ADMIN", "COORDINATOR", "STAFF"):
         response = await async_client.get("/api/v1/auth/me", headers=auth_headers(
-            uuid.uuid4(), f"{sneaky.lower()}@campus.edu", user_metadata={"role": sneaky}))
+            uuid.uuid4(), f"{sneaky.lower()}@mvsrec.edu.in", user_metadata={"role": sneaky}))
         assert response.json()["role"] == "STUDENT"
 
 
 async def test_tokens_without_a_usable_identity_get_no_profile(async_client, auth_headers):
     no_email = auth_headers(uuid.uuid4(), None)
-    anonymous = auth_headers(uuid.uuid4(), "anon@campus.edu", is_anonymous=True)
+    anonymous = auth_headers(uuid.uuid4(), "anon@mvsrec.edu.in", is_anonymous=True)
     assert (await async_client.get("/api/v1/auth/me", headers=no_email)).status_code == 401
     assert (await async_client.get("/api/v1/auth/me", headers=anonymous)).status_code == 401
 
 
 async def test_an_email_already_owned_by_another_profile_is_refused(async_client, auth_headers):
-    imposter = auth_headers(uuid.uuid4(), "admin@fixmycampus.dev")  # new id, existing admin email
+    async with AsyncSessionLocal() as session:
+        session.add(User(id=uuid.uuid4(), email="taken@mvsrec.edu.in", full_name="Original Owner", role="STUDENT"))
+        await session.commit()
+    imposter = auth_headers(uuid.uuid4(), "taken@mvsrec.edu.in")  # new Supabase id, existing profile email
     assert (await async_client.get("/api/v1/auth/me", headers=imposter)).status_code == 401
+
+
+async def test_single_letter_email_names_still_get_a_valid_profile(async_client, auth_headers):
+    response = await async_client.get("/api/v1/auth/me", headers=auth_headers(uuid.uuid4(), "a@mvsrec.edu.in"))
+    assert response.status_code == 200 and response.json()["full_name"] == "a@mvsrec.edu.in"
+
+
+# ------------------------------------------------------- email domain restriction
+
+@pytest.mark.parametrize("email", [
+    "someone@gmail.com",
+    "someone@mvsrec.edu.in.evil.com",    # allowed domain as a prefix of another
+    "someone@evilmvsrec.edu.in",         # allowed domain as a suffix of another
+    "someone@cse.mvsrec.edu.in",         # sub-domain
+    "mvsrec.edu.in",                     # no local part / no @
+])
+async def test_signup_outside_the_college_domain_is_refused_with_a_clear_message(async_client, auth_headers, email):
+    response = await async_client.get("/api/v1/auth/me", headers=auth_headers(uuid.uuid4(), email))
+    assert response.status_code == 403
+    assert "@mvsrec.edu.in" in response.json()["error"]["message"]
+
+
+async def test_college_emails_are_accepted_in_any_letter_case(async_client, auth_headers):
+    response = await async_client.get("/api/v1/auth/me", headers=auth_headers(uuid.uuid4(), "Roll.No@MvsRec.Edu.In"))
+    assert response.status_code == 200 and response.json()["email"] == "roll.no@mvsrec.edu.in"
+
+
+async def test_refused_signups_leave_no_profile_behind(async_client, auth_headers):
+    refused = uuid.uuid4()
+    await async_client.get("/api/v1/auth/me", headers=auth_headers(refused, "x@gmail.com"))
+    async with AsyncSessionLocal() as session:
+        assert await session.scalar(select(User).where(User.id == refused)) is None
+
+
+async def test_existing_profiles_keep_working_whatever_their_email_domain(async_client, auth_headers):
+    # e.g. the first admin, created before the restriction (or by an admin with an outside address)
+    outside_id = uuid.uuid4()
+    async with AsyncSessionLocal() as session:
+        session.add(User(id=outside_id, email="founder@gmail.com", full_name="Founder", role="ADMIN"))
+        await session.commit()
+    response = await async_client.get("/api/v1/auth/me", headers=auth_headers(outside_id, "founder@gmail.com"))
+    assert response.status_code == 200 and response.json()["role"] == "ADMIN"
+
+
+async def test_an_empty_allow_list_disables_the_restriction(async_client, auth_headers, monkeypatch):
+    monkeypatch.setattr(settings, "ALLOWED_EMAIL_DOMAINS", "")
+    assert (await async_client.get("/api/v1/auth/me", headers=auth_headers(uuid.uuid4(), "a@gmail.com"))).status_code == 200
+
+
+async def test_several_domains_can_be_allowed(async_client, auth_headers, monkeypatch):
+    monkeypatch.setattr(settings, "ALLOWED_EMAIL_DOMAINS", " mvsrec.edu.in , @alumni.mvsrec.edu.in ")
+    for email in ("a@mvsrec.edu.in", "b@alumni.mvsrec.edu.in"):
+        assert (await async_client.get("/api/v1/auth/me", headers=auth_headers(uuid.uuid4(), email))).status_code == 200
+    assert (await async_client.get("/api/v1/auth/me", headers=auth_headers(uuid.uuid4(), "c@gmail.com"))).status_code == 403
 
 
 # ---------------------------------------------- asymmetric (ES256 / JWKS) tokens

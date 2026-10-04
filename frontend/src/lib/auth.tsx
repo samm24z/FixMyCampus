@@ -37,23 +37,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
   const userId = useRef<string | null>(null);
 
-  const loadProfile = useCallback(async (): Promise<User | null> => {
+  const loadProfile = useCallback(async (): Promise<User> => {
     try {
       const profile = (await authApi.me()).data;
       userId.current = profile.id;
       setUser(profile);
       return profile;
-    } catch {
+    } catch (error) {
       userId.current = null;
       setUser(null);
-      return null;
+      throw error;
     }
   }, []);
 
   useEffect(() => {
     let active = true;
     supabase.auth.getSession().then(async ({ data }) => {
-      if (data.session) await loadProfile();
+      if (data.session) await loadProfile().catch(() => undefined);
       if (active) setIsLoading(false);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
@@ -64,7 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       // Supabase re-emits SIGNED_IN when the tab regains focus; only reload for a different user.
       // Deferred with setTimeout because calling Supabase from inside this callback can deadlock.
-      if (event === 'SIGNED_IN' && userId.current !== session.user.id) setTimeout(() => void loadProfile(), 0);
+      if (event === 'SIGNED_IN' && userId.current !== session.user.id) setTimeout(() => void loadProfile().catch(() => undefined), 0);
     });
     return () => {
       active = false;
@@ -76,12 +76,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     async (email: string, password: string) => {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      const profile = await loadProfile();
-      if (!profile) {
+      try {
+        return await loadProfile();
+      } catch (profileError) {
         await supabase.auth.signOut();
-        throw new Error('This account is deactivated or could not be loaded. Contact a campus administrator.');
+        // e.g. "Sign-up is limited to @mvsrec.edu.in email addresses." or a deactivated account.
+        throw new Error(getApiError(profileError, 'Your account could not be loaded. Contact a campus administrator.'));
       }
-      return profile;
     },
     [loadProfile],
   );
@@ -99,7 +100,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) throw error;
       // With "Confirm email" on, Supabase returns no session until the emailed link is clicked.
       if (!data.session) return { user: null, needsConfirmation: true };
-      return { user: await loadProfile(), needsConfirmation: false };
+      return { user: await loadProfile().catch(() => null), needsConfirmation: false };
     },
     [loadProfile],
   );

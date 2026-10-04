@@ -13,6 +13,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth';
+import { CAMPUS } from '@/lib/campus';
 import type { Role } from '@/lib/api';
 
 export const Navbar: React.FC = () => {
@@ -41,7 +42,7 @@ export const Navbar: React.FC = () => {
                 FixMyCampus <span className="gradient-text font-black">AI</span>
               </span>
               <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
-                Grievance Resolution Platform
+                {CAMPUS.name}
               </span>
             </div>
           </Link>

@@ -3,6 +3,7 @@ import { AxiosError, type AxiosResponse } from 'axios';
 import { describe, expect, it } from 'vitest';
 import { getApiError } from './api';
 import { roleHome } from './auth';
+import { isCampusEmail } from './campus';
 
 function apiError(status: number, data: unknown) {
   const error = new AxiosError('failed');
@@ -46,5 +47,18 @@ describe('roleHome', () => {
     expect(roleHome('STAFF')).toBe('/staff');
     expect(roleHome('COORDINATOR')).toBe('/staff');
     expect(roleHome('ADMIN')).toBe('/admin');
+  });
+});
+
+describe('isCampusEmail', () => {
+  it('accepts only exact college-domain addresses, in any case', () => {
+    expect(isCampusEmail('roll.no@mvsrec.edu.in')).toBe(true);
+    expect(isCampusEmail('  Roll.No@MVSREC.edu.in ')).toBe(true);
+  });
+
+  it('rejects other domains, look-alikes, sub-domains and malformed input', () => {
+    for (const bad of ['a@gmail.com', 'a@mvsrec.edu.in.evil.com', 'a@evilmvsrec.edu.in', 'a@cse.mvsrec.edu.in', 'mvsrec.edu.in', '@mvsrec.edu.in', 'a@b@mvsrec.edu.in', '']) {
+      expect(isCampusEmail(bad), bad).toBe(false);
+    }
   });
 });

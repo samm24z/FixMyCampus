@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfigBanner } from '@/components/auth/ConfigBanner';
 import { getApiError, roleHome, useAuth } from '@/lib/auth';
+import { CAMPUS, EMAIL_HINT } from '@/lib/campus';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -63,7 +64,7 @@ export const LoginPage: React.FC = () => {
           </div>
           <CardTitle className="text-2xl font-bold">Sign In</CardTitle>
           <CardDescription>
-            Enter your institutional email to access your campus grievance portal.
+            Sign in with your {CAMPUS.shortName} college email to report and track campus issues.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -72,12 +73,12 @@ export const LoginPage: React.FC = () => {
           {error && <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
           {notice && <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm">{notice}</div>}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Campus Email</label>
+            <label className="text-sm font-medium">College Email</label>
             <div className="relative">
               <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <input
                 type="email"
-                placeholder="student@campus.edu"
+                placeholder={EMAIL_HINT}
                 className="w-full pl-9 pr-4 py-2 border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -117,7 +118,7 @@ export const LoginPage: React.FC = () => {
             </Link>
           </div>
           <Badge variant="outline" className="text-[11px] text-muted-foreground">
-            Secure campus account access
+            {CAMPUS.name}
           </Badge>
         </CardFooter>
       </Card>

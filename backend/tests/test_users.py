@@ -96,6 +96,14 @@ async def test_failed_profile_insert_removes_the_orphan_supabase_account(
         assert await session.scalar(select(User).where(User.id == created_id)) is None
 
 
+async def test_admins_may_create_accounts_outside_the_signup_domain(async_client: AsyncClient, login, fake_supabase_admin):
+    # The domain rule is for self-signup; an admin can deliberately add e.g. an external contractor.
+    response = await async_client.post(
+        "/api/v1/users", json=new_user(role="STUDENT", email="contractor@example.com"), headers=await login("admin")
+    )
+    assert response.status_code == 201
+
+
 async def test_non_admins_cannot_create_or_modify_users(async_client: AsyncClient, login, fake_supabase_admin):
     student_id = (await async_client.get("/api/v1/auth/me", headers=await login("student"))).json()["id"]
     for prefix in ("student", "staff", "coordinator"):

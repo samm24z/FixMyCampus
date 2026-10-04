@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     API_V1_STR: str = "/api/v1"
 
+    # Self-signup is limited to these email domains (comma separated, matched exactly: sub-domains and
+    # look-alikes are rejected). Empty = no restriction. Applies when an account first appears;
+    # accounts an admin creates, and profiles that already exist, are not affected.
+    ALLOWED_EMAIL_DOMAINS: str = "mvsrec.edu.in"
+
     # Supabase Auth: identity (sign-up, login, password reset, sessions) is delegated to it.
     # The backend only verifies the access tokens it issues and keeps roles in its own database.
     SUPABASE_URL: str = ""  # e.g. https://<project-ref>.supabase.co
@@ -119,6 +124,18 @@ class Settings(BaseSettings):
     AI_CLASSIFIER_MODEL: str = "distilbert-base-uncased"
     AI_SIMILARITY_THRESHOLD: float = 0.82
     OPENAI_API_KEY: str = ""
+
+    @property
+    def allowed_email_domains(self) -> list[str]:
+        return [d.strip().lower().lstrip("@") for d in self.ALLOWED_EMAIL_DOMAINS.split(",") if d.strip()]
+
+    def is_email_allowed(self, email: str) -> bool:
+        """True if ``email`` belongs to one of the allowed domains (always true when none are configured)."""
+        domains = self.allowed_email_domains
+        if not domains:
+            return True
+        local, at, domain = email.strip().lower().rpartition("@")
+        return bool(local) and bool(at) and domain in domains
 
     @property
     def supabase_issuer(self) -> str:
