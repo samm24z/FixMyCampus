@@ -6,7 +6,7 @@ from app.schemas.department import (
     DepartmentBase, DepartmentCreate, DepartmentUpdate, DepartmentRead,
     CategoryBase, CategoryCreate, CategoryRead
 )
-from app.schemas.ticket import TicketBase, TicketCreate, TicketTriageUpdate, TicketStatusChange, TicketReopenRequest, TicketRead, TicketFilter, TicketSummary
+from app.schemas.ticket import TicketBase, TicketCreate, TicketTriageUpdate, TicketStatusChange, TicketReopenRequest, TicketWithdrawRequest, TicketRead, TicketFilter, TicketSummary
 from app.schemas.comment import CommentCreate, CommentRead
 from app.schemas.attachment import AttachmentCreate, AttachmentRead
 from app.schemas.status_history import StatusChangeRequest, StatusHistoryRead
@@ -47,6 +47,7 @@ __all__ = [
     "TicketTriageUpdate",
     "TicketStatusChange",
     "TicketReopenRequest",
+    "TicketWithdrawRequest",
     "TicketRead",
     "TicketFilter",
     "TicketSummary",

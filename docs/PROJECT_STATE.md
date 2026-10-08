@@ -1,5 +1,15 @@
 # Current Project State
 
+## Update 2026-10-08: ticket lifecycle cleanup and resolution feedback
+
+- **Remarks required** (`requires_remarks` in `permissions.py`, enforced in `change_status`): moving to RESOLVED needs a resolution note, closing a NEW/UNDER_REVIEW ticket needs a rejection reason. Blank/whitespace gives 422.
+- **Reporter actions**: `POST /tickets/{ref}/confirm` (RESOLVED to CLOSED), `/withdraw` (NEW/UNDER_REVIEW to CLOSED, optional reason), `/feedback` (1-5 rating + comment on RESOLVED/CLOSED tickets; one row per ticket, resubmitting updates it and writes a `FEEDBACK_SUBMITTED` audit row). Reopen now clears `resolved_at`. CLOSED tickets no longer accept comments.
+- **Auto-close**: RESOLVED tickets with no reporter response close after `AUTO_CLOSE_RESOLVED_AFTER_DAYS` (7). A loop started in `main.py` lifespan runs every `AUTO_CLOSE_INTERVAL_MINUTES` (60; 0 disables); `backend/scripts/close_resolved_tickets.py` is the one-shot for cron. Migration `20261008_0005` makes `ticket_status_history.changed_by` nullable (NULL = system); the UI shows "System".
+- `TicketPermissions` gained `can_confirm`, `can_withdraw`, `can_give_feedback`, `statuses_requiring_remarks`; `TicketDetailRead` gained `feedback`. Ticket page: required-remarks field, confirm/withdraw cards, star-rating feedback card, "Ticket is closed" note.
+- **Admin page**: "Recent Tickets" replaced by an All Tickets section (status chips with counts from `summary.by_status`, searchable paginated table with SLA overdue flag). Shared `STATUSES`/`priorityVariant`/`statusVariant` moved to `frontend/src/lib/tickets.ts`.
+- Removed the unused `backend/app/repositories/` package and `TicketDetailResponse`.
+- 127 backend tests (30 new), 9 frontend tests.
+
 ## Update 2026-10-04: college tailoring and sign-up restriction
 
 - Sign-up is limited to `@mvsrec.edu.in` (MVSR Engineering College) in three layers: register form (`frontend/src/lib/campus.ts`), backend (`ALLOWED_EMAIL_DOMAINS`, exact-domain match, 403 with a clear message; look-alike, sub-domain and malformed addresses refused) and a Supabase "Before User Created" hook (`docs/supabase/restrict_signup_domain.sql`, function installed; must be switched on in the dashboard).

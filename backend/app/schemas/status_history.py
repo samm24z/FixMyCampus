@@ -15,7 +15,7 @@ class StatusChangeRequest(BaseModel):
 class StatusHistoryRead(BaseModel):
     id: uuid.UUID
     ticket_id: uuid.UUID
-    changed_by: uuid.UUID
+    changed_by: Optional[uuid.UUID] = None
     from_status: Optional[TicketStatusEnum] = None
     to_status: TicketStatusEnum
     remarks: Optional[str] = None

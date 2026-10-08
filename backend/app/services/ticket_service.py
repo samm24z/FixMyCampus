@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core import permissions as policy
+from app.core.config import settings
 from app.core.exceptions import (
     ConflictException,
     ForbiddenException,
@@ -24,10 +25,11 @@ from app.core.exceptions import (
 from app.models.department import Department
 from app.models.enums import AuditActionEnum, RoleEnum, TicketStatusEnum
 from app.models.sla import SLARule
-from app.models.ticket import Ticket, TicketAssignment, TicketComment, TicketStatusHistory
+from app.models.ticket import Ticket, TicketAssignment, TicketComment, TicketFeedback, TicketStatusHistory
 from app.models.user import User
 from app.schemas.assignment import AssignmentRead
 from app.schemas.comment import CommentCreate, CommentRead
+from app.schemas.feedback import FeedbackCreate, FeedbackRead
 from app.schemas.status_history import StatusHistoryRead
 from app.schemas.ticket import (
     TicketCreate,
@@ -36,6 +38,7 @@ from app.schemas.ticket import (
     TicketReopenRequest,
     TicketStatusChange,
     TicketTriageUpdate,
+    TicketWithdrawRequest,
 )
 from app.schemas.ticket_detail import (
     DashboardSummary,
@@ -62,6 +65,7 @@ def _detail_query():
         selectinload(Ticket.comments).selectinload(TicketComment.user),
         selectinload(Ticket.status_history),
         selectinload(Ticket.assignments),
+        selectinload(Ticket.feedback),
     )
 
 
@@ -164,6 +168,7 @@ def build_detail(ticket: Ticket, user: User) -> TicketDetailRead:
         comments=comments,
         history=[StatusHistoryRead.model_validate(h) for h in sorted(ticket.status_history, key=lambda item: item.created_at)],
         assignments=[AssignmentRead.model_validate(a) for a in sorted(ticket.assignments, key=lambda item: item.created_at)],
+        feedback=FeedbackRead.model_validate(ticket.feedback) if ticket.feedback else None,
         permissions=TicketPermissions(
             allowed_statuses=sorted(policy.allowed_status_transitions(user, ticket)),
             can_assign=policy.can_assign(user, ticket),
@@ -171,6 +176,12 @@ def build_detail(ticket: Ticket, user: User) -> TicketDetailRead:
             can_comment=policy.can_comment(user, ticket),
             can_comment_internal=policy.can_comment_internal(user, ticket),
             can_reopen=policy.can_reopen(user, ticket),
+            can_confirm=policy.can_confirm_resolution(user, ticket),
+            can_withdraw=policy.can_withdraw(user, ticket),
+            can_give_feedback=policy.can_give_feedback(user, ticket),
+            statuses_requiring_remarks=[
+                status for status in S if policy.requires_remarks(ticket.status, status.value)
+            ],
         ),
     )
 
@@ -199,8 +210,8 @@ async def _require_department(db: AsyncSession, department_id: UUID) -> Departme
     return department
 
 
-def _record_status(db: AsyncSession, ticket: Ticket, user: User, old: Optional[str], new: str, remarks: Optional[str] = None) -> None:
-    db.add(TicketStatusHistory(ticket_id=ticket.id, changed_by=user.id, from_status=old, to_status=new, remarks=remarks))
+def _record_status(db: AsyncSession, ticket: Ticket, user: Optional[User], old: Optional[str], new: str, remarks: Optional[str] = None) -> None:
+    db.add(TicketStatusHistory(ticket_id=ticket.id, changed_by=user.id if user else None, from_status=old, to_status=new, remarks=remarks))
     record_audit(
         db, user=user, action=AuditActionEnum.STATUS_CHANGE, entity_type="ticket", entity_id=ticket.id,
         old_values={"status": old}, new_values={"status": new, "remarks": remarks},
@@ -244,6 +255,9 @@ async def change_status(db: AsyncSession, user: User, ticket_ref: str, payload: 
     if new not in policy.allowed_status_transitions(user, ticket):
         hint = " (assign the ticket to a staff member first)" if new == S.ASSIGNED.value and ticket.assigned_to is None else ""
         raise ConflictException(f"Cannot move a ticket from {old} to {new}{hint}")
+    if policy.requires_remarks(old, new) and not (payload.remarks and payload.remarks.strip()):
+        what = "a resolution note" if new == S.RESOLVED.value else "a reason for rejecting the ticket"
+        raise UnprocessableException(f"Remarks are required: please give {what}")
     ticket.status = new
     if new == S.RESOLVED.value:
         ticket.resolved_at = _now()
@@ -349,6 +363,71 @@ async def reopen_ticket(db: AsyncSession, user: User, ticket_ref: str, payload: 
     old = ticket.status
     ticket.status = S.REOPENED.value
     ticket.reopened_at = _now()
+    ticket.resolved_at = None
     _record_status(db, ticket, user, old, ticket.status, payload.reason)
     await db.commit()
     return await _detail_after_commit(db, user, ticket.id)
+
+
+async def confirm_resolution(db: AsyncSession, user: User, ticket_ref: str) -> TicketDetailRead:
+    ticket = await get_ticket_for_user(db, user, ticket_ref, for_update=True)
+    if ticket.created_by != user.id:
+        raise ForbiddenException("Only the reporter can confirm the fix")
+    if not policy.can_confirm_resolution(user, ticket):
+        raise ConflictException("Only resolved tickets can be confirmed")
+    old = ticket.status
+    ticket.status = S.CLOSED.value
+    _record_status(db, ticket, user, old, ticket.status, "Confirmed fixed by reporter")
+    await db.commit()
+    return await _detail_after_commit(db, user, ticket.id)
+
+
+async def withdraw_ticket(db: AsyncSession, user: User, ticket_ref: str, payload: TicketWithdrawRequest) -> TicketDetailRead:
+    ticket = await get_ticket_for_user(db, user, ticket_ref, for_update=True)
+    if ticket.created_by != user.id:
+        raise ForbiddenException("Only the reporter can withdraw this ticket")
+    if not policy.can_withdraw(user, ticket):
+        raise ConflictException("Only tickets that are not yet assigned can be withdrawn")
+    old = ticket.status
+    ticket.status = S.CLOSED.value
+    reason = payload.reason.strip() if payload.reason else ""
+    _record_status(db, ticket, user, old, ticket.status, f"Withdrawn by reporter: {reason}" if reason else "Withdrawn by reporter")
+    await db.commit()
+    return await _detail_after_commit(db, user, ticket.id)
+
+
+async def submit_feedback(db: AsyncSession, user: User, ticket_ref: str, payload: FeedbackCreate) -> TicketDetailRead:
+    ticket = await get_ticket_for_user(db, user, ticket_ref, for_update=True)
+    if ticket.created_by != user.id:
+        raise ForbiddenException("Only the reporter can rate this ticket")
+    if not policy.can_give_feedback(user, ticket):
+        raise ConflictException("Feedback can only be given on a ticket that was resolved")
+    feedback = ticket.feedback
+    old = {"rating": feedback.rating, "comments": feedback.comments} if feedback else None
+    if feedback is None:
+        db.add(TicketFeedback(ticket_id=ticket.id, user_id=user.id, rating=payload.rating, comments=payload.comments))
+    else:
+        feedback.rating, feedback.comments = payload.rating, payload.comments
+    record_audit(
+        db, user=user, action=AuditActionEnum.FEEDBACK_SUBMITTED, entity_type="ticket", entity_id=ticket.id,
+        old_values=old, new_values={"rating": payload.rating, "comments": payload.comments},
+    )
+    await db.commit()
+    return await _detail_after_commit(db, user, ticket.id)
+
+
+async def auto_close_resolved_tickets(db: AsyncSession, now: Optional[datetime] = None) -> int:
+    """Close RESOLVED tickets the reporter has not answered for AUTO_CLOSE_RESOLVED_AFTER_DAYS days."""
+    days = settings.AUTO_CLOSE_RESOLVED_AFTER_DAYS
+    cutoff = (now or _now()) - timedelta(days=days)
+    tickets = (await db.scalars(
+        select(Ticket)
+        .where(Ticket.status == S.RESOLVED.value, Ticket.resolved_at < cutoff)
+        .with_for_update(skip_locked=True)
+    )).all()
+    for ticket in tickets:
+        ticket.status = S.CLOSED.value
+        _record_status(db, ticket, None, S.RESOLVED.value, S.CLOSED.value,
+                       f"Auto-closed: no response from reporter within {days} days")
+    await db.commit()
+    return len(tickets)

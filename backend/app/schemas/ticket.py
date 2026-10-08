@@ -53,6 +53,10 @@ class TicketReopenRequest(BaseModel):
     reason: Optional[str] = Field(None, max_length=2000)
 
 
+class TicketWithdrawRequest(BaseModel):
+    reason: Optional[str] = Field(None, max_length=2000)
+
+
 class TicketRead(TicketBase):
     id: uuid.UUID
     ticket_number: str

@@ -58,6 +58,8 @@ ASSIGNABLE_STATUSES = {
 PROMOTE_TO_ASSIGNED_STATUSES = {S.NEW.value, S.UNDER_REVIEW.value, S.REOPENED.value}
 REOPENABLE_STATUSES = {S.RESOLVED.value, S.CLOSED.value}
 DONE_STATUSES = {S.RESOLVED.value, S.CLOSED.value}
+# A reporter may withdraw a ticket until work has been assigned.
+WITHDRAWABLE_STATUSES = {S.NEW.value, S.UNDER_REVIEW.value}
 
 
 def is_admin(user: User) -> bool:
@@ -96,7 +98,7 @@ def can_view_ticket(user: User, ticket: Ticket) -> bool:
 
 
 def can_comment(user: User, ticket: Ticket) -> bool:
-    return can_view_ticket(user, ticket)
+    return can_view_ticket(user, ticket) and ticket.status != S.CLOSED.value
 
 
 def can_comment_internal(user: User, ticket: Ticket) -> bool:
@@ -118,6 +120,24 @@ def can_change_status(user: User, ticket: Ticket) -> bool:
 
 def can_reopen(user: User, ticket: Ticket) -> bool:
     return ticket.created_by == user.id and ticket.status in REOPENABLE_STATUSES
+
+
+def can_confirm_resolution(user: User, ticket: Ticket) -> bool:
+    return ticket.created_by == user.id and ticket.status == S.RESOLVED.value
+
+
+def can_withdraw(user: User, ticket: Ticket) -> bool:
+    return ticket.created_by == user.id and ticket.status in WITHDRAWABLE_STATUSES
+
+
+def can_give_feedback(user: User, ticket: Ticket) -> bool:
+    """Only tickets that were actually resolved: not withdrawn or rejected ones."""
+    return ticket.created_by == user.id and ticket.status in DONE_STATUSES and ticket.resolved_at is not None
+
+
+def requires_remarks(old: str, new: str) -> bool:
+    """Resolving needs a resolution note; closing an untouched ticket needs a rejection reason."""
+    return new == S.RESOLVED.value or (new == S.CLOSED.value and old in WITHDRAWABLE_STATUSES)
 
 
 def allowed_status_transitions(user: User, ticket: Ticket) -> set[str]:

@@ -1,6 +1,7 @@
 """Pure unit tests for the RBAC / lifecycle policy (no database)."""
 
 import uuid
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -12,10 +13,10 @@ def user(role, *, department_id=None, uid=None):
     return SimpleNamespace(id=uid or uuid.uuid4(), role=role, department_id=department_id)
 
 
-def ticket(status="NEW", *, created_by=None, assigned_to=None, department_id=None):
+def ticket(status="NEW", *, created_by=None, assigned_to=None, department_id=None, resolved_at=None):
     return SimpleNamespace(
         status=status, created_by=created_by or uuid.uuid4(), assigned_to=assigned_to,
-        confirmed_department_id=department_id,
+        confirmed_department_id=department_id, resolved_at=resolved_at,
     )
 
 
@@ -89,6 +90,59 @@ def test_only_the_reporter_can_reopen_a_finished_ticket():
     assert not policy.can_reopen(me, ticket("IN_PROGRESS", created_by=me.id))
     assert not policy.can_reopen(me, ticket("RESOLVED"))
     assert not policy.can_reopen(user("ADMIN"), ticket("RESOLVED"))
+
+
+def test_nobody_can_comment_on_a_closed_ticket():
+    me = user("STUDENT")
+    assert policy.can_comment(me, ticket("RESOLVED", created_by=me.id))
+    assert not policy.can_comment(me, ticket("CLOSED", created_by=me.id))
+    assert not policy.can_comment(user("ADMIN"), ticket("CLOSED"))
+    assert not policy.can_comment_internal(user("ADMIN"), ticket("CLOSED"))
+
+
+@pytest.mark.parametrize("old,new,expected", [
+    ("IN_PROGRESS", "RESOLVED", True),
+    ("NEW", "CLOSED", True),
+    ("UNDER_REVIEW", "CLOSED", True),
+    ("RESOLVED", "CLOSED", False),
+    ("NEW", "UNDER_REVIEW", False),
+    ("ASSIGNED", "IN_PROGRESS", False),
+    ("RESOLVED", "REOPENED", False),
+])
+def test_requires_remarks(old, new, expected):
+    assert policy.requires_remarks(old, new) is expected
+
+
+def test_only_the_reporter_confirms_a_resolved_ticket():
+    me = user("STUDENT")
+    assert policy.can_confirm_resolution(me, ticket("RESOLVED", created_by=me.id))
+    assert not policy.can_confirm_resolution(me, ticket("CLOSED", created_by=me.id))
+    assert not policy.can_confirm_resolution(me, ticket("RESOLVED"))
+    assert not policy.can_confirm_resolution(user("ADMIN"), ticket("RESOLVED"))
+
+
+@pytest.mark.parametrize("status,expected", [
+    ("NEW", True), ("UNDER_REVIEW", True), ("ASSIGNED", False), ("IN_PROGRESS", False),
+    ("RESOLVED", False), ("REOPENED", False), ("CLOSED", False),
+])
+def test_reporter_withdraws_only_before_assignment(status, expected):
+    me = user("STUDENT")
+    assert policy.can_withdraw(me, ticket(status, created_by=me.id)) is expected
+    assert not policy.can_withdraw(user("ADMIN"), ticket(status))
+
+
+@pytest.mark.parametrize("status,expected", [
+    ("NEW", False), ("IN_PROGRESS", False), ("REOPENED", False), ("RESOLVED", True), ("CLOSED", True),
+])
+def test_reporter_gives_feedback_only_on_done_tickets(status, expected):
+    me, resolved = user("STUDENT"), datetime.now(timezone.utc)
+    assert policy.can_give_feedback(me, ticket(status, created_by=me.id, resolved_at=resolved)) is expected
+    assert not policy.can_give_feedback(user("ADMIN"), ticket(status, resolved_at=resolved))
+
+
+def test_no_feedback_on_withdrawn_or_rejected_tickets():
+    me = user("STUDENT")
+    assert not policy.can_give_feedback(me, ticket("CLOSED", created_by=me.id))
 
 
 def test_department_less_staff_filter_never_compiles_to_is_null():

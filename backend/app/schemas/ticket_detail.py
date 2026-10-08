@@ -3,11 +3,12 @@
 import uuid
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 from app.models.enums import TicketStatusEnum
 from app.schemas.assignment import AssignmentRead
 from app.schemas.comment import CommentRead
+from app.schemas.feedback import FeedbackRead
 from app.schemas.status_history import StatusHistoryRead
 from app.schemas.ticket import TicketRead
 
@@ -24,6 +25,10 @@ class TicketPermissions(BaseModel):
     can_comment: bool = False
     can_comment_internal: bool = False
     can_reopen: bool = False
+    can_confirm: bool = False
+    can_withdraw: bool = False
+    can_give_feedback: bool = False
+    statuses_requiring_remarks: List[TicketStatusEnum] = []
 
 
 class TicketDetailRead(TicketRead):
@@ -33,6 +38,7 @@ class TicketDetailRead(TicketRead):
     comments: List[CommentRead] = []
     history: List[StatusHistoryRead] = []
     assignments: List[AssignmentRead] = []
+    feedback: Optional[FeedbackRead] = None
     permissions: TicketPermissions = TicketPermissions()
 
 
@@ -48,7 +54,3 @@ class TicketAssignmentRequest(BaseModel):
     assigned_to: uuid.UUID
     department_id: Optional[uuid.UUID] = None
     notes: Optional[str] = None
-
-
-class TicketDetailResponse(TicketDetailRead):
-    model_config = ConfigDict(from_attributes=True)

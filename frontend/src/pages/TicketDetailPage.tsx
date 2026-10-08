@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Clock, MapPin, User, Building2, FileText, Send, RotateCcw, CalendarClock } from 'lucide-react';
+import { ArrowLeft, Clock, MapPin, User, Building2, FileText, Send, RotateCcw, CalendarClock, CheckCircle2, Star, Undo2 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import {
   type TicketStatus,
   type User as AppUser,
 } from '@/lib/api';
+import { statusVariant } from '@/lib/tickets';
 
 const PRIORITIES: TicketPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 const selectClass = 'mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm';
@@ -35,6 +36,9 @@ export const TicketDetailPage: React.FC = () => {
   const [nextStatus, setNextStatus] = useState<TicketStatus | ''>('');
   const [remarks, setRemarks] = useState('');
   const [reopenReason, setReopenReason] = useState('');
+  const [withdrawReason, setWithdrawReason] = useState('');
+  const [rating, setRating] = useState(0);
+  const [feedbackComments, setFeedbackComments] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -47,6 +51,8 @@ export const TicketDetailPage: React.FC = () => {
     setDepartmentId(next.confirmed_department_id || '');
     setNextStatus('');
     setRemarks('');
+    setRating(next.feedback?.rating ?? 0);
+    setFeedbackComments(next.feedback?.comments ?? '');
   }
 
   useEffect(() => {
@@ -92,7 +98,7 @@ export const TicketDetailPage: React.FC = () => {
 
   const { permissions } = ticket;
   const ref = ticket.ticket_number;
-  const finished = ticket.status === 'RESOLVED' || ticket.status === 'CLOSED';
+  const remarksRequired = !!nextStatus && permissions.statuses_requiring_remarks.includes(nextStatus);
   const visibleStaff = departmentId ? staff.filter((member) => member.department_id === departmentId) : staff;
   const departmentName = (departmentId: string | null) => departments.find((item) => item.id === departmentId)?.name;
 
@@ -103,7 +109,7 @@ export const TicketDetailPage: React.FC = () => {
       <div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-md">{ticket.ticket_number}</span>
-          <Badge variant={finished ? 'success' : 'warning'}>{ticket.status}</Badge>
+          <Badge variant={statusVariant(ticket.status)}>{ticket.status}</Badge>
           <Badge variant={ticket.priority === 'CRITICAL' ? 'destructive' : 'outline'}>{ticket.priority}</Badge>
         </div>
         <h1 className="text-2xl sm:text-3xl font-bold mt-2">{ticket.title}</h1>
@@ -176,10 +182,33 @@ export const TicketDetailPage: React.FC = () => {
                     {permissions.allowed_statuses.map((item) => <option key={item}>{item}</option>)}
                   </select>
                 </label>
-                <label className="text-xs font-medium">Remarks (optional)
+                <label className="text-xs font-medium">Remarks{remarksRequired ? ' (required)' : ' (optional)'}
                   <input value={remarks} onChange={(event) => setRemarks(event.target.value)} className={selectClass} placeholder="What changed?" />
                 </label>
-                <Button className="sm:col-span-2" disabled={isSaving || !nextStatus} onClick={() => perform(() => ticketsApi.changeStatus(ref, nextStatus as TicketStatus, remarks))}>Update Status</Button>
+                <Button className="sm:col-span-2" disabled={isSaving || !nextStatus || (remarksRequired && !remarks.trim())} onClick={() => perform(() => ticketsApi.changeStatus(ref, nextStatus as TicketStatus, remarks))}>Update Status</Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {(permissions.can_give_feedback || ticket.feedback) && (
+            <Card>
+              <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><Star className="h-4 w-4 text-primary" /> Resolution Feedback</CardTitle>{permissions.can_give_feedback && <CardDescription>How well was this resolved?</CardDescription>}</CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex gap-1" role="radiogroup" aria-label="Rating">
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <button key={value} type="button" role="radio" aria-checked={rating === value} aria-label={`${value} star${value > 1 ? 's' : ''}`} disabled={!permissions.can_give_feedback || isSaving} onClick={() => setRating(value)} className="disabled:cursor-default">
+                      <Star className={`h-6 w-6 ${value <= rating ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground'}`} />
+                    </button>
+                  ))}
+                </div>
+                {permissions.can_give_feedback ? (
+                  <>
+                    <textarea value={feedbackComments} onChange={(event) => setFeedbackComments(event.target.value)} maxLength={2000} rows={3} placeholder="Comments (optional)" className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                    <Button disabled={isSaving || rating === 0 || (rating === ticket.feedback?.rating && feedbackComments === (ticket.feedback?.comments ?? ''))} onClick={() => perform(() => ticketsApi.submitFeedback(ref, rating, feedbackComments))}>{ticket.feedback ? 'Update Feedback' : 'Submit Feedback'}</Button>
+                  </>
+                ) : (
+                  ticket.feedback?.comments && <p className="text-sm text-muted-foreground">{ticket.feedback.comments}</p>
+                )}
               </CardContent>
             </Card>
           )}
@@ -212,6 +241,7 @@ export const TicketDetailPage: React.FC = () => {
                   )}
                 </div>
               )}
+              {!permissions.can_comment && ticket.status === 'CLOSED' && <p className="text-sm text-muted-foreground">Ticket is closed.</p>}
             </CardContent>
           </Card>
         </div>
@@ -232,13 +262,27 @@ export const TicketDetailPage: React.FC = () => {
               {ticket.history.length === 0 && <p className="text-xs text-muted-foreground">No status history.</p>}
               {ticket.history.map((item) => (
                 <div key={item.id} className="border-l-2 border-primary/30 pl-3">
-                  <p className="text-xs font-semibold">{item.to_status}</p>
+                  <p className="text-xs font-semibold">{item.to_status}{item.changed_by === null && <span className="font-normal text-muted-foreground"> - System</span>}</p>
                   {item.remarks && <p className="text-[11px] text-foreground">{item.remarks}</p>}
                   <p className="text-[11px] text-muted-foreground">{new Date(item.created_at).toLocaleString()}</p>
                 </div>
               ))}
             </CardContent>
           </Card>
+          {permissions.can_confirm && (
+            <Card className="border-emerald-500/30">
+              <CardHeader><CardTitle className="text-base font-bold">Is the issue fixed?</CardTitle><CardDescription>Confirm to close this ticket. Otherwise it closes by itself a few days after being resolved.</CardDescription></CardHeader>
+              <CardContent><Button className="w-full gap-2" disabled={isSaving} onClick={() => perform(() => ticketsApi.confirm(ref))}><CheckCircle2 className="h-4 w-4" /> Confirm Fixed</Button></CardContent>
+            </Card>
+          )}
+          {permissions.can_withdraw && (
+            <Card>
+              <CardContent className="space-y-2 pt-6">
+                <input value={withdrawReason} onChange={(event) => setWithdrawReason(event.target.value)} placeholder="Reason for withdrawing (optional)" className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                <Button variant="outline" className="w-full gap-2" disabled={isSaving} onClick={() => perform(() => ticketsApi.withdraw(ref, withdrawReason), () => setWithdrawReason(''))}><Undo2 className="h-4 w-4" /> Withdraw Ticket</Button>
+              </CardContent>
+            </Card>
+          )}
           {permissions.can_reopen && (
             <Card>
               <CardContent className="space-y-2 pt-6">

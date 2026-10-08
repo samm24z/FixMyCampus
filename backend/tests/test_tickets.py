@@ -1,14 +1,16 @@
 """Ticket lifecycle, scoping, and audit integration tests (real PostgreSQL)."""
 
 import re
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 
 from app.core.database import AsyncSessionLocal
-from app.models import AuditLog, Department
+from app.models import AuditLog, Department, Ticket
 from app.models.enums import AuditActionEnum
+from app.services import ticket_service
 
 DEMO_USER_PREFIXES = ["student", "student2", "faculty", "staff", "staff2", "coordinator", "admin"]
 
@@ -324,7 +326,7 @@ async def test_dashboard_summary_counts_by_status(async_client, login):
     student, coordinator = await login("student"), await login("coordinator")
     await create_ticket(async_client, student)
     second = await create_ticket(async_client, student)
-    await move(async_client, coordinator, second["ticket_number"], "CLOSED")
+    await move(async_client, coordinator, second["ticket_number"], "CLOSED", remarks="Duplicate request")
 
     summary = (await async_client.get("/api/v1/tickets/summary", headers=student)).json()
     assert summary["total_tickets"] == 2 and summary["open_tickets"] == 1 and summary["resolved_tickets"] == 1
@@ -336,3 +338,176 @@ async def test_dashboard_summary_counts_by_status(async_client, login):
 async def test_unauthenticated_requests_are_rejected(async_client):
     assert (await async_client.get("/api/v1/tickets")).status_code == 401
     assert (await async_client.post("/api/v1/tickets", json=NEW_TICKET)).status_code == 401
+
+
+# -------------------------------------------- remarks, confirm, withdraw, feedback
+
+async def resolved_ticket(client, login) -> tuple[str, dict, dict]:
+    """File a ticket and take it to RESOLVED; returns (ref, student headers, coordinator headers)."""
+    student, coordinator, staff = await login("student"), await login("coordinator"), await login("staff")
+    ref = (await create_ticket(client, student))["ticket_number"]
+    await assign(client, coordinator, ref, await staff_id(client, coordinator, "staff@fixmycampus.dev"))
+    await move(client, staff, ref, "IN_PROGRESS")
+    assert (await move(client, staff, ref, "RESOLVED", remarks="Fixed")).status_code == 200
+    return ref, student, coordinator
+
+
+def post(client, headers, ref, action, **body):
+    return client.post(f"/api/v1/tickets/{ref}/{action}", json=body, headers=headers)
+
+
+async def test_resolving_and_rejecting_require_remarks(async_client, login):
+    student, coordinator, staff = await login("student"), await login("coordinator"), await login("staff")
+    ref = (await create_ticket(async_client, student))["ticket_number"]
+    detail = (await async_client.get(f"/api/v1/tickets/{ref}", headers=coordinator)).json()
+    assert detail["permissions"]["statuses_requiring_remarks"] == ["RESOLVED", "CLOSED"]
+
+    for remarks in (None, "", "   "):
+        extra = {} if remarks is None else {"remarks": remarks}
+        assert (await move(async_client, coordinator, ref, "CLOSED", **extra)).status_code == 422
+    assert (await move(async_client, coordinator, ref, "UNDER_REVIEW")).status_code == 200  # no remarks needed
+    assert (await move(async_client, coordinator, ref, "CLOSED", remarks="Out of scope")).status_code == 200
+
+    other = (await create_ticket(async_client, student))["ticket_number"]
+    await assign(async_client, coordinator, other, await staff_id(async_client, coordinator, "staff@fixmycampus.dev"))
+    assert (await move(async_client, staff, other, "IN_PROGRESS")).status_code == 200  # no remarks needed
+    assert (await move(async_client, staff, other, "RESOLVED")).status_code == 422
+    assert (await move(async_client, staff, other, "RESOLVED", remarks="  ")).status_code == 422
+    assert (await move(async_client, staff, other, "RESOLVED", remarks="Rebooted router")).status_code == 200
+
+
+async def test_reopen_clears_resolved_at(async_client, login):
+    ref, student, _ = await resolved_ticket(async_client, login)
+    assert (await async_client.get(f"/api/v1/tickets/{ref}", headers=student)).json()["resolved_at"] is not None
+    reopened = await post(async_client, student, ref, "reopen", reason="Still broken")
+    assert reopened.status_code == 200 and reopened.json()["resolved_at"] is None
+
+
+async def test_reporter_confirms_a_resolved_ticket(async_client, login):
+    ref, student, coordinator = await resolved_ticket(async_client, login)
+    assert (await async_client.get(f"/api/v1/tickets/{ref}", headers=student)).json()["permissions"]["can_confirm"]
+    assert (await post(async_client, coordinator, ref, "confirm")).status_code == 403
+    assert (await post(async_client, await login("student2"), ref, "confirm")).status_code == 404
+
+    confirmed = await post(async_client, student, ref, "confirm")
+    assert confirmed.status_code == 200 and confirmed.json()["status"] == "CLOSED"
+    last = confirmed.json()["history"][-1]
+    assert (last["from_status"], last["to_status"]) == ("RESOLVED", "CLOSED")
+    assert last["remarks"] == "Confirmed fixed by reporter" and last["changed_by"] == confirmed.json()["created_by"]
+    assert (await post(async_client, student, ref, "confirm")).status_code == 409  # no longer RESOLVED
+
+
+async def test_confirm_needs_a_resolved_ticket(async_client, login):
+    student = await login("student")
+    ref = (await create_ticket(async_client, student))["ticket_number"]
+    assert (await post(async_client, student, ref, "confirm")).status_code == 409
+
+
+async def test_reporter_can_withdraw_until_work_is_assigned(async_client, login):
+    student, coordinator = await login("student"), await login("coordinator")
+    ref = (await create_ticket(async_client, student))["ticket_number"]
+    assert (await async_client.get(f"/api/v1/tickets/{ref}", headers=student)).json()["permissions"]["can_withdraw"]
+    assert (await post(async_client, coordinator, ref, "withdraw")).status_code == 403
+    assert (await post(async_client, await login("student2"), ref, "withdraw")).status_code == 404
+
+    withdrawn = await post(async_client, student, ref, "withdraw", reason="Filed by mistake")
+    assert withdrawn.status_code == 200 and withdrawn.json()["status"] == "CLOSED"
+    assert withdrawn.json()["history"][-1]["remarks"] == "Withdrawn by reporter: Filed by mistake"
+    assert (await post(async_client, student, ref, "withdraw")).status_code == 409
+
+    plain = (await create_ticket(async_client, student))["ticket_number"]
+    await move(async_client, coordinator, plain, "UNDER_REVIEW")
+    result = await post(async_client, student, plain, "withdraw")
+    assert result.status_code == 200 and result.json()["history"][-1]["remarks"] == "Withdrawn by reporter"
+
+    assigned = (await create_ticket(async_client, student))["ticket_number"]
+    await assign(async_client, coordinator, assigned, await staff_id(async_client, coordinator, "staff@fixmycampus.dev"))
+    assert (await post(async_client, student, assigned, "withdraw")).status_code == 409
+
+
+async def test_nobody_can_comment_on_a_closed_ticket(async_client, login):
+    student, coordinator = await login("student"), await login("coordinator")
+    ref = (await create_ticket(async_client, student))["ticket_number"]
+    assert (await post(async_client, student, ref, "withdraw")).status_code == 200
+    detail = (await async_client.get(f"/api/v1/tickets/{ref}", headers=student)).json()
+    assert detail["permissions"]["can_comment"] is False
+    for headers in (student, coordinator):
+        assert (await post(async_client, headers, ref, "comments", content="Any update?")).status_code == 403
+
+
+async def test_withdrawn_tickets_cannot_be_rated(async_client, login):
+    student = await login("student")
+    ref = (await create_ticket(async_client, student))["ticket_number"]
+    withdrawn = await post(async_client, student, ref, "withdraw")
+    assert withdrawn.status_code == 200 and withdrawn.json()["permissions"]["can_give_feedback"] is False
+    assert (await post(async_client, student, ref, "feedback", rating=5)).status_code == 409
+
+
+async def test_feedback_rules_and_upsert(async_client, login):
+    student, coordinator = await login("student"), await login("coordinator")
+    fresh = (await create_ticket(async_client, student))["ticket_number"]
+    assert (await post(async_client, student, fresh, "feedback", rating=5)).status_code == 409  # not done yet
+
+    ref, student, coordinator = await resolved_ticket(async_client, login)
+    assert (await async_client.get(f"/api/v1/tickets/{ref}", headers=student)).json()["permissions"]["can_give_feedback"]
+    assert (await post(async_client, coordinator, ref, "feedback", rating=5)).status_code == 403
+    assert (await post(async_client, await login("student2"), ref, "feedback", rating=5)).status_code == 404
+    for bad in (0, 6):
+        assert (await post(async_client, student, ref, "feedback", rating=bad)).status_code == 422
+
+    first = await post(async_client, student, ref, "feedback", rating=3, comments="Okay")
+    assert first.status_code == 200 and first.json()["feedback"]["rating"] == 3
+    second = await post(async_client, student, ref, "feedback", rating=5, comments="Great after all")
+    feedback = second.json()["feedback"]
+    assert feedback["rating"] == 5 and feedback["comments"] == "Great after all"
+    assert feedback["id"] == first.json()["feedback"]["id"]  # one row per ticket
+
+    assert (await async_client.get(f"/api/v1/tickets/{ref}", headers=coordinator)).json()["feedback"]["rating"] == 5
+    async with AsyncSessionLocal() as session:
+        rows = (await session.scalars(select(AuditLog).where(
+            AuditLog.entity_id == second.json()["id"], AuditLog.action == AuditActionEnum.FEEDBACK_SUBMITTED.value
+        ).order_by(AuditLog.created_at))).all()
+    assert len(rows) == 2 and rows[0].old_values is None
+    assert rows[1].old_values["rating"] == 3 and rows[1].new_values["rating"] == 5
+
+
+async def test_stale_resolved_tickets_are_auto_closed(async_client, login):
+    old_ref, student, _ = await resolved_ticket(async_client, login)
+    fresh_ref, _, _ = await resolved_ticket(async_client, login)
+    async with AsyncSessionLocal() as session:
+        old = await session.scalar(select(Ticket).where(Ticket.ticket_number == old_ref))
+        fresh = await session.scalar(select(Ticket).where(Ticket.ticket_number == fresh_ref))
+        old.resolved_at = datetime.now(timezone.utc) - timedelta(days=8)
+        fresh.resolved_at = datetime.now(timezone.utc) - timedelta(days=1)
+        await session.commit()
+    async with AsyncSessionLocal() as session:
+        assert await ticket_service.auto_close_resolved_tickets(session) == 1
+
+    closed = (await async_client.get(f"/api/v1/tickets/{old_ref}", headers=student)).json()
+    assert closed["status"] == "CLOSED"
+    assert closed["history"][-1]["changed_by"] is None
+    assert closed["history"][-1]["remarks"].startswith("Auto-closed")
+    assert (await async_client.get(f"/api/v1/tickets/{fresh_ref}", headers=student)).json()["status"] == "RESOLVED"
+    async with AsyncSessionLocal() as session:
+        audit = await session.scalars(select(AuditLog).where(AuditLog.entity_id == closed["id"], AuditLog.user_id.is_(None)))
+        assert len(audit.all()) == 1
+
+
+async def test_admin_sees_every_reporters_tickets_with_matching_status_counts(async_client, login):
+    admin, coordinator = await login("admin"), await login("coordinator")
+    first = await create_ticket(async_client, await login("student"))
+    second = await create_ticket(async_client, await login("student2"))
+    third = await create_ticket(async_client, await login("faculty"))
+    await move(async_client, coordinator, second["ticket_number"], "UNDER_REVIEW")
+    await move(async_client, coordinator, third["ticket_number"], "CLOSED", remarks="Out of scope")
+
+    listing = (await async_client.get("/api/v1/tickets?page_size=100", headers=admin)).json()
+    statuses = {t["ticket_number"]: t["status"] for t in listing["items"]}
+    assert statuses == {first["ticket_number"]: "NEW", second["ticket_number"]: "UNDER_REVIEW", third["ticket_number"]: "CLOSED"}
+    assert len({t["created_by"] for t in listing["items"]}) == 3
+
+    summary = (await async_client.get("/api/v1/tickets/summary", headers=admin)).json()
+    assert summary["total_tickets"] == listing["total"] == 3
+    assert summary["by_status"] == {"NEW": 1, "UNDER_REVIEW": 1, "CLOSED": 1}
+    closed_only = (await async_client.get("/api/v1/tickets?status=CLOSED", headers=admin)).json()
+    assert closed_only["total"] == summary["by_status"]["CLOSED"]

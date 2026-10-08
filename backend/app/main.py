@@ -1,21 +1,46 @@
 """FixMyCampus AI - Main FastAPI Application Entrypoint."""
 
-from contextlib import asynccontextmanager
+import asyncio
+import logging
+from contextlib import asynccontextmanager, suppress
 from typing import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.api import api_router
 from app.api.v1.health import router as health_router
 from app.core.config import settings
+from app.core.database import AsyncSessionLocal
 from app.core.exceptions import register_exception_handlers
+from app.services import ticket_service
+
+logger = logging.getLogger("app.auto_close")
+
+
+async def _auto_close_loop(interval_minutes: int) -> None:
+    while True:
+        try:
+            async with AsyncSessionLocal() as db:
+                closed = await ticket_service.auto_close_resolved_tickets(db)
+            if closed:
+                logger.info("Auto-closed %d resolved ticket(s)", closed)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Auto-close pass failed")
+        await asyncio.sleep(interval_minutes * 60)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application startup and shutdown lifecycle handler."""
-    # Startup tasks
+    task = None
+    if settings.AUTO_CLOSE_INTERVAL_MINUTES > 0:
+        task = asyncio.create_task(_auto_close_loop(settings.AUTO_CLOSE_INTERVAL_MINUTES))
     yield
-    # Shutdown tasks
+    if task:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
 
 
 app = FastAPI(

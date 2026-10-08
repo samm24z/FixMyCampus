@@ -135,8 +135,8 @@ class TicketStatusHistory(Base, UUIDMixin, TimestampMixin):
     ticket_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tickets.id", ondelete="CASCADE"), index=True, nullable=False
     )
-    changed_by: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    changed_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=True
     )
     from_status: Mapped[Optional[TicketStatusEnum]] = mapped_column(String(30), nullable=True)
     to_status: Mapped[TicketStatusEnum] = mapped_column(String(30), nullable=False)

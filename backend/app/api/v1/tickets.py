@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.models.enums import PriorityEnum, TicketStatusEnum
 from app.models.user import User
 from app.schemas.comment import CommentCreate
+from app.schemas.feedback import FeedbackCreate
 from app.schemas.common import PaginatedResponse
 from app.schemas.ticket import (
     TicketCreate,
@@ -19,6 +20,7 @@ from app.schemas.ticket import (
     TicketReopenRequest,
     TicketStatusChange,
     TicketTriageUpdate,
+    TicketWithdrawRequest,
 )
 from app.schemas.ticket_detail import DashboardSummary, TicketAssignmentRequest, TicketDetailRead
 from app.services import ticket_service
@@ -106,3 +108,22 @@ async def reopen_ticket(
     ticket_ref: str, payload: TicketReopenRequest, db: DbSession, current_user: CurrentUser
 ) -> TicketDetailRead:
     return await ticket_service.reopen_ticket(db, current_user, ticket_ref, payload)
+
+
+@router.post("/{ticket_ref}/confirm", response_model=TicketDetailRead)
+async def confirm_resolution(ticket_ref: str, db: DbSession, current_user: CurrentUser) -> TicketDetailRead:
+    return await ticket_service.confirm_resolution(db, current_user, ticket_ref)
+
+
+@router.post("/{ticket_ref}/withdraw", response_model=TicketDetailRead)
+async def withdraw_ticket(
+    ticket_ref: str, payload: TicketWithdrawRequest, db: DbSession, current_user: CurrentUser
+) -> TicketDetailRead:
+    return await ticket_service.withdraw_ticket(db, current_user, ticket_ref, payload)
+
+
+@router.post("/{ticket_ref}/feedback", response_model=TicketDetailRead)
+async def submit_feedback(
+    ticket_ref: str, payload: FeedbackCreate, db: DbSession, current_user: CurrentUser
+) -> TicketDetailRead:
+    return await ticket_service.submit_feedback(db, current_user, ticket_ref, payload)

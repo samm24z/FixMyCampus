@@ -63,6 +63,7 @@ export interface TicketComment {
 
 export interface TicketHistoryEntry {
   id: string;
+  changed_by: string | null;
   from_status: TicketStatus | null;
   to_status: TicketStatus;
   remarks: string | null;
@@ -77,6 +78,17 @@ export interface TicketPermissions {
   can_comment: boolean;
   can_comment_internal: boolean;
   can_reopen: boolean;
+  can_confirm: boolean;
+  can_withdraw: boolean;
+  can_give_feedback: boolean;
+  statuses_requiring_remarks: TicketStatus[];
+}
+
+export interface TicketFeedback {
+  id: string;
+  rating: number;
+  comments: string | null;
+  created_at: string;
 }
 
 export interface TicketDetail extends Ticket {
@@ -85,6 +97,7 @@ export interface TicketDetail extends Ticket {
   department_name: string | null;
   comments: TicketComment[];
   history: TicketHistoryEntry[];
+  feedback: TicketFeedback | null;
   permissions: TicketPermissions;
 }
 
@@ -223,6 +236,11 @@ export const ticketsApi = {
     api.post<TicketDetail>(`/tickets/${ref}/comments`, { content, is_internal: isInternal }),
   reopen: (ref: string, reason?: string) =>
     api.post<TicketDetail>(`/tickets/${ref}/reopen`, { reason: reason || null }),
+  confirm: (ref: string) => api.post<TicketDetail>(`/tickets/${ref}/confirm`),
+  withdraw: (ref: string, reason?: string) =>
+    api.post<TicketDetail>(`/tickets/${ref}/withdraw`, { reason: reason || null }),
+  submitFeedback: (ref: string, rating: number, comments?: string) =>
+    api.post<TicketDetail>(`/tickets/${ref}/feedback`, { rating, comments: comments || null }),
 };
 
 /** Drop empty filter values so they are not sent as `?status=`. */

@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     # Server-side secret ("service_role" / "secret" key) used to create and ban accounts. Never ship to the browser.
     SUPABASE_SERVICE_ROLE_KEY: str = ""
 
+    # Resolved tickets the reporter never answers are closed after this many days. A background loop
+    # checks every AUTO_CLOSE_INTERVAL_MINUTES (0 = disabled; use scripts/close_resolved_tickets.py from cron).
+    AUTO_CLOSE_RESOLVED_AFTER_DAYS: int = 7
+    AUTO_CLOSE_INTERVAL_MINUTES: int = 60
+
     # Server settings
     BACKEND_HOST: str = "0.0.0.0"
     BACKEND_PORT: int = 8000

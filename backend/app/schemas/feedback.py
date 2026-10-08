@@ -7,9 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class FeedbackCreate(BaseModel):
-    ticket_id: uuid.UUID
     rating: int = Field(..., ge=1, le=5, description="Satisfaction rating from 1 to 5")
-    comments: Optional[str] = None
+    comments: Optional[str] = Field(None, max_length=2000)
 
 
 class FeedbackRead(BaseModel):
