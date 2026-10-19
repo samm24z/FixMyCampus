@@ -283,7 +283,18 @@ async def test_the_model_is_told_the_campus_places_and_may_link_to_the_campus_gu
 
 def test_rooms_and_floors_are_read_from_the_message():
     assert assistant_service._location("", "Water leak on the 2nd floor of the Civil Block, near Room 12B") == "Civil Block, 2nd floor, Room 12B"
-    assert assistant_service._location("", "ground floor washroom in the Mechanical Block") == "Mechanical Block, Ground floor"
+    assert assistant_service._location("", "ground floor washroom in the Mechanical Block") == "Mechanical Block, Ground floor, Washroom"
     assert assistant_service._location("", "the tap is leaking") == ""
     assert assistant_service._location("near the stairs", "the door in the CSE Block is stuck") == "CSE Block, near the stairs"
     assert assistant_service._location("Library", "the tap near the CSE Block is leaking") == "Library"
+
+
+@pytest.mark.parametrize("proposed,message,expected", [
+    ("", "Water is leaking from the tap in the washroom near the exam branch", "AS2 (Exam Branch), Washroom"),
+    ("Civil Block", "The projector in the civil block seminar hall won't turn on", "Civil Block, Seminar hall"),
+    ("Lab 3", "the AC in lab 3 of mechanical block is leaking", "Mechanical Block, Lab 3"),
+    ("CSE Block, Room 204", "fan in Room 204 of the CSE Block", "CSE Block, Room 204"),
+])
+def test_report_location_keeps_the_spot_inside_the_place(proposed, message, expected):
+    from app.services.assistant_service import _location
+    assert _location(proposed, message) == expected

@@ -148,17 +148,23 @@ def _clean(value: object, limit: int) -> str:
     return " ".join(str(value or "").split())[:limit]
 
 
-_ROOM = re.compile(r"\broom\s*(?:no\.?\s*)?[a-z]?-?\d{1,4}[a-z]?\b|\b(?:ground|\d{1,2}(?:st|nd|rd|th)|first|second|third|fourth)\s+floor\b", re.I)
+_ROOM = re.compile(
+    r"\broom\s*(?:no\.?\s*)?[a-z]?-?\d{1,4}[a-z]?\b|\b(?:ground|\d{1,2}(?:st|nd|rd|th)|first|second|third|fourth)\s+floor\b"
+    r"|\b(?:lab|laboratory)\s*(?:no\.?\s*)?\d{1,3}\b|\b(?:exam|seminar)\s+hall(?:\s*\d{1,2})?\b"
+    r"|\b(?:gents|ladies|boys|girls|men'?s|women'?s)?\s*(?:washroom|toilet|restroom|bathroom)s?\b"
+    r"|\b(?:staff\s+room|corridor|stair(?:case|s)|entrance|lobby)\b",
+    re.I,
+)
 
 
 def _location(proposed: object, message: str) -> str:
     """The model's location, or one read from the message: a known place first, then any room or floor it names."""
     location = _clean(proposed, 255)
     place = campus.match_place(message)
-    if location:
+    detail = ", ".join(dict.fromkeys(m.group(0).strip()[0].upper() + m.group(0).strip()[1:] for m in _ROOM.finditer(message)))
+    if location and not (place and location == place.name):
         return campus.compose_location(place.name, location)[:255] if place and campus.match_place(location) is None else location
-    detail = ", ".join(dict.fromkeys(m.group(0)[0].upper() + m.group(0)[1:] for m in _ROOM.finditer(message)))
-    return campus.compose_location(place.name if place else "", detail)[:255]
+    return campus.compose_location(place.name if place else location, detail)[:255]  # a bare place gets the spot added
 
 
 def _category(proposed: object, *texts: str) -> str:
@@ -216,7 +222,9 @@ def validate_actions(
 
 _PROBLEM_CUES = re.compile(
     r"\b(broken|not working|isn'?t working|doesn'?t work|stopped working|out of order|damaged|crack\w*|leak\w*|overflow\w*|"
-    r"dirty|smell\w*|spark\w*|flicker\w*|fault\w*|no (water|power|electricity|wifi|internet)|problem|complain\w*)\b",
+    r"dirty|smell\w*|spark\w*|flicker\w*|fault\w*|no (water|power|electricity|wifi|internet)|problem|complain\w*|"
+    r"won'?t (turn on|start|switch on|work|open|close|lock)|(not|isn'?t) (turning|switching) on|dead|stuck|jammed|clogged|blocked|"
+    r"tripp\w*|short circuit|power cut|outage|down since|keeps? (dropping|disconnecting|failing))\b",
     re.I,
 )
 
@@ -301,7 +309,9 @@ async def chat(db: AsyncSession, user: User, payload: AssistantChatRequest) -> A
         marked = [int(n) for group in re.findall(r"\[([\d,\s]+)\]", answer) for n in re.findall(r"\d+", group)]
         wanted = marked or ([] if any(a.type in WRITE_ACTIONS for a in actions) else reply.cited)
         cited = [n for n in dict.fromkeys(wanted) if 1 <= n <= len(passages)]
-        response = AssistantChatResponse(answer=answer, sources=_sources(passages, cited), actions=actions, status=reply.status)
+        # Reporting a problem isn't a question the website should answer, so it is never "not found".
+        status = "answered" if any(a.type == "report_problem" for a in actions) else reply.status
+        response = AssistantChatResponse(answer=answer, sources=_sources(passages, cited), actions=actions, status=status)
     record_audit(
         db, user=user, action=AuditActionEnum.ASSISTANT_CHAT, entity_type="assistant_chat", entity_id=uuid.uuid4(),
         new_values={"message_length": len(message), "status": response.status},
