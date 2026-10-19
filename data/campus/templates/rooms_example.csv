@@ -1,0 +1,6 @@
+place_key,floor,room_name,room_type,department,notes
+cse-block,2,Room 204,classroom,CSE,
+cse-block,2,Lab 3 (Computer Lab),lab,CSE,60 systems
+as2,0,Exam Hall 2,exam hall,Exam Branch,
+civil-block,1,Principal's Office,office,Administration,
+mechanical-block,0,Gents washroom (near stairs),washroom,,

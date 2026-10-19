@@ -1,0 +1,5 @@
+full_name,job_title,app_role,department,email,phone,places,categories,backup,working_hours,notes
+Ravi Kumar,Electrician,STAFF,Electrical Maintenance,ravi.electrician@mvsrec.edu.in,9000000001,cse-block;mechanical-block;civil-block,Electrical,no,Mon-Sat 9:00-17:00,
+Suresh Rao,Electrician (relief),STAFF,Electrical Maintenance,suresh.r@mvsrec.edu.in,9000000002,cse-block;mechanical-block;civil-block,Electrical,yes,Mon-Sat 9:00-17:00,covers when Ravi is away
+Anitha P,Network Administrator,STAFF,IT Department,network@mvsrec.edu.in,9000000003,all,IT / Network,no,Mon-Fri 9:30-16:30,
+Lakshmi D,Housekeeping Supervisor,STAFF,Sanitation,housekeeping@mvsrec.edu.in,9000000004,all,Sanitation;Water / Plumbing,no,Mon-Sat 7:00-15:00,
