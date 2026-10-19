@@ -9,13 +9,13 @@ export const NotFoundPage: React.FC = () => {
       <div className="p-4 rounded-full bg-destructive/10 text-destructive mb-2">
         <ShieldAlert className="h-10 w-10" />
       </div>
-      <h1 className="text-4xl font-extrabold">404 - Page Not Found</h1>
+      <h1 className="text-4xl font-extrabold">Page not found</h1>
       <p className="text-muted-foreground text-sm max-w-md">
-        The requested grievance portal page or route does not exist.
+        We couldn't find the page you were looking for.
       </p>
       <Link to="/">
         <Button className="gap-2 mt-4">
-          <ArrowLeft className="h-4 w-4" /> Return to Overview
+          <ArrowLeft className="h-4 w-4" /> Go to the home page
         </Button>
       </Link>
     </div>

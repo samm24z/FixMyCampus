@@ -32,7 +32,7 @@ async def _check_department(db: AsyncSession, role: str, department_id: Optional
     if department_id is not None:
         found = await db.scalar(select(Department.id).where(Department.id == department_id, Department.is_active.is_(True)))
         if found is None:
-            raise UnprocessableException("Department not found or inactive")
+            raise UnprocessableException("That department doesn't exist or is no longer active")
     if role == RoleEnum.STAFF.value and department_id is None:
         raise UnprocessableException("Staff accounts must belong to a department")
 

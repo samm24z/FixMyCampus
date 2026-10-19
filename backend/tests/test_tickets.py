@@ -393,7 +393,7 @@ async def test_reporter_confirms_a_resolved_ticket(async_client, login):
     assert confirmed.status_code == 200 and confirmed.json()["status"] == "CLOSED"
     last = confirmed.json()["history"][-1]
     assert (last["from_status"], last["to_status"]) == ("RESOLVED", "CLOSED")
-    assert last["remarks"] == "Confirmed fixed by reporter" and last["changed_by"] == confirmed.json()["created_by"]
+    assert last["remarks"] == "Confirmed fixed by the reporter" and last["changed_by"] == confirmed.json()["created_by"]
     assert (await post(async_client, student, ref, "confirm")).status_code == 409  # no longer RESOLVED
 
 
@@ -412,13 +412,13 @@ async def test_reporter_can_withdraw_until_work_is_assigned(async_client, login)
 
     withdrawn = await post(async_client, student, ref, "withdraw", reason="Filed by mistake")
     assert withdrawn.status_code == 200 and withdrawn.json()["status"] == "CLOSED"
-    assert withdrawn.json()["history"][-1]["remarks"] == "Withdrawn by reporter: Filed by mistake"
+    assert withdrawn.json()["history"][-1]["remarks"] == "Cancelled by the reporter: Filed by mistake"
     assert (await post(async_client, student, ref, "withdraw")).status_code == 409
 
     plain = (await create_ticket(async_client, student))["ticket_number"]
     await move(async_client, coordinator, plain, "UNDER_REVIEW")
     result = await post(async_client, student, plain, "withdraw")
-    assert result.status_code == 200 and result.json()["history"][-1]["remarks"] == "Withdrawn by reporter"
+    assert result.status_code == 200 and result.json()["history"][-1]["remarks"] == "Cancelled by the reporter"
 
     assigned = (await create_ticket(async_client, student))["ticket_number"]
     await assign(async_client, coordinator, assigned, await staff_id(async_client, coordinator, "staff@fixmycampus.dev"))
@@ -486,7 +486,7 @@ async def test_stale_resolved_tickets_are_auto_closed(async_client, login):
     closed = (await async_client.get(f"/api/v1/tickets/{old_ref}", headers=student)).json()
     assert closed["status"] == "CLOSED"
     assert closed["history"][-1]["changed_by"] is None
-    assert closed["history"][-1]["remarks"].startswith("Auto-closed")
+    assert closed["history"][-1]["remarks"].startswith("Closed automatically")
     assert (await async_client.get(f"/api/v1/tickets/{fresh_ref}", headers=student)).json()["status"] == "RESOLVED"
     async with AsyncSessionLocal() as session:
         audit = await session.scalars(select(AuditLog).where(AuditLog.entity_id == closed["id"], AuditLog.user_id.is_(None)))

@@ -51,6 +51,11 @@ from app.services.audit_service import record_audit
 S = TicketStatusEnum
 
 
+def _label(status: str) -> str:
+    """Status as people read it: IN_PROGRESS -> 'in progress'."""
+    return status.replace("_", " ").lower()
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -206,7 +211,7 @@ async def _sla_deadline(db: AsyncSession, category: str, priority: str, start: d
 async def _require_department(db: AsyncSession, department_id: UUID) -> Department:
     department = await db.scalar(select(Department).where(Department.id == department_id, Department.is_active.is_(True)))
     if department is None:
-        raise UnprocessableException("Department not found or inactive")
+        raise UnprocessableException("That department doesn't exist or is no longer active")
     return department
 
 
@@ -248,16 +253,16 @@ async def create_ticket(db: AsyncSession, user: User, payload: TicketCreate) -> 
 async def change_status(db: AsyncSession, user: User, ticket_ref: str, payload: TicketStatusChange) -> TicketDetailRead:
     ticket = await get_ticket_for_user(db, user, ticket_ref, for_update=True)
     if not policy.can_change_status(user, ticket):
-        raise ForbiddenException("You cannot change the status of this ticket")
+        raise ForbiddenException("You can't change the status of this ticket")
     old, new = ticket.status, payload.status.value
     if new == old:
-        raise ConflictException(f"Ticket is already {old}")
+        raise ConflictException(f"This ticket is already {_label(old)}")
     if new not in policy.allowed_status_transitions(user, ticket):
-        hint = " (assign the ticket to a staff member first)" if new == S.ASSIGNED.value and ticket.assigned_to is None else ""
-        raise ConflictException(f"Cannot move a ticket from {old} to {new}{hint}")
+        hint = ". Assign it to a staff member first" if new == S.ASSIGNED.value and ticket.assigned_to is None else ""
+        raise ConflictException(f"A ticket can't go from {_label(old)} to {_label(new)}{hint}")
     if policy.requires_remarks(old, new) and not (payload.remarks and payload.remarks.strip()):
-        what = "a resolution note" if new == S.RESOLVED.value else "a reason for rejecting the ticket"
-        raise UnprocessableException(f"Remarks are required: please give {what}")
+        what = "saying what was fixed" if new == S.RESOLVED.value else "saying why this ticket is being turned down"
+        raise UnprocessableException(f"Please add a note {what}")
     ticket.status = new
     if new == S.RESOLVED.value:
         ticket.resolved_at = _now()
@@ -271,7 +276,7 @@ async def assign_ticket(db: AsyncSession, user: User, ticket_ref: str, payload: 
     if not policy.can_triage(user):
         raise ForbiddenException("Only coordinators and admins can assign tickets")
     if ticket.status not in policy.ASSIGNABLE_STATUSES:
-        raise ConflictException(f"A {ticket.status} ticket cannot be assigned")
+        raise ConflictException(f"A ticket that is {_label(ticket.status)} can't be assigned")
     assignee = await db.scalar(select(User).where(
         User.id == payload.assigned_to, User.is_active.is_(True), User.role == RoleEnum.STAFF.value
     ))
@@ -279,7 +284,7 @@ async def assign_ticket(db: AsyncSession, user: User, ticket_ref: str, payload: 
         raise NotFoundException("Staff member", payload.assigned_to)
     department_id = payload.department_id or assignee.department_id
     if department_id is None:
-        raise UnprocessableException("A department is required: the staff member has none on record")
+        raise UnprocessableException("Please choose a department: this staff member doesn't belong to one")
     await _require_department(db, department_id)
 
     old_status = ticket.status
@@ -305,7 +310,7 @@ async def assign_ticket(db: AsyncSession, user: User, ticket_ref: str, payload: 
 async def update_triage(db: AsyncSession, user: User, ticket_ref: str, payload: TicketTriageUpdate) -> TicketDetailRead:
     ticket = await get_ticket_for_user(db, user, ticket_ref, for_update=True)
     if not policy.can_triage(user):
-        raise ForbiddenException("Only coordinators and admins can edit triage fields")
+        raise ForbiddenException("Only coordinators and admins can change the category or priority")
     if not policy.can_edit_triage(user, ticket):
         raise ConflictException("Closed tickets cannot be edited")
 
@@ -348,7 +353,7 @@ async def add_comment(db: AsyncSession, user: User, ticket_ref: str, payload: Co
     if not policy.can_comment(user, ticket):
         raise ForbiddenException("You cannot comment on this ticket")
     if payload.is_internal and not policy.can_comment_internal(user, ticket):
-        raise ForbiddenException("Only staff can post internal notes")
+        raise ForbiddenException("Only staff can add staff-only notes")
     db.add(TicketComment(ticket_id=ticket.id, user_id=user.id, content=payload.content, is_internal=payload.is_internal))
     await db.commit()
     return await _detail_after_commit(db, user, ticket.id)
@@ -357,7 +362,7 @@ async def add_comment(db: AsyncSession, user: User, ticket_ref: str, payload: Co
 async def reopen_ticket(db: AsyncSession, user: User, ticket_ref: str, payload: TicketReopenRequest) -> TicketDetailRead:
     ticket = await get_ticket_for_user(db, user, ticket_ref, for_update=True)
     if ticket.created_by != user.id:
-        raise ForbiddenException("Only the reporter can reopen this ticket")
+        raise ForbiddenException("Only the person who reported this ticket can reopen it")
     if ticket.status not in policy.REOPENABLE_STATUSES:
         raise ConflictException("Only resolved or closed tickets can be reopened")
     old = ticket.status
@@ -372,12 +377,12 @@ async def reopen_ticket(db: AsyncSession, user: User, ticket_ref: str, payload: 
 async def confirm_resolution(db: AsyncSession, user: User, ticket_ref: str) -> TicketDetailRead:
     ticket = await get_ticket_for_user(db, user, ticket_ref, for_update=True)
     if ticket.created_by != user.id:
-        raise ForbiddenException("Only the reporter can confirm the fix")
+        raise ForbiddenException("Only the person who reported this ticket can confirm the fix")
     if not policy.can_confirm_resolution(user, ticket):
         raise ConflictException("Only resolved tickets can be confirmed")
     old = ticket.status
     ticket.status = S.CLOSED.value
-    _record_status(db, ticket, user, old, ticket.status, "Confirmed fixed by reporter")
+    _record_status(db, ticket, user, old, ticket.status, "Confirmed fixed by the reporter")
     await db.commit()
     return await _detail_after_commit(db, user, ticket.id)
 
@@ -385,13 +390,13 @@ async def confirm_resolution(db: AsyncSession, user: User, ticket_ref: str) -> T
 async def withdraw_ticket(db: AsyncSession, user: User, ticket_ref: str, payload: TicketWithdrawRequest) -> TicketDetailRead:
     ticket = await get_ticket_for_user(db, user, ticket_ref, for_update=True)
     if ticket.created_by != user.id:
-        raise ForbiddenException("Only the reporter can withdraw this ticket")
+        raise ForbiddenException("Only the person who reported this ticket can cancel it")
     if not policy.can_withdraw(user, ticket):
-        raise ConflictException("Only tickets that are not yet assigned can be withdrawn")
+        raise ConflictException("A ticket can only be cancelled before it is assigned to someone")
     old = ticket.status
     ticket.status = S.CLOSED.value
     reason = payload.reason.strip() if payload.reason else ""
-    _record_status(db, ticket, user, old, ticket.status, f"Withdrawn by reporter: {reason}" if reason else "Withdrawn by reporter")
+    _record_status(db, ticket, user, old, ticket.status, f"Cancelled by the reporter: {reason}" if reason else "Cancelled by the reporter")
     await db.commit()
     return await _detail_after_commit(db, user, ticket.id)
 
@@ -399,9 +404,9 @@ async def withdraw_ticket(db: AsyncSession, user: User, ticket_ref: str, payload
 async def submit_feedback(db: AsyncSession, user: User, ticket_ref: str, payload: FeedbackCreate) -> TicketDetailRead:
     ticket = await get_ticket_for_user(db, user, ticket_ref, for_update=True)
     if ticket.created_by != user.id:
-        raise ForbiddenException("Only the reporter can rate this ticket")
+        raise ForbiddenException("Only the person who reported this ticket can rate it")
     if not policy.can_give_feedback(user, ticket):
-        raise ConflictException("Feedback can only be given on a ticket that was resolved")
+        raise ConflictException("You can only rate a ticket after it has been fixed")
     feedback = ticket.feedback
     old = {"rating": feedback.rating, "comments": feedback.comments} if feedback else None
     if feedback is None:
@@ -428,6 +433,6 @@ async def auto_close_resolved_tickets(db: AsyncSession, now: Optional[datetime] 
     for ticket in tickets:
         ticket.status = S.CLOSED.value
         _record_status(db, ticket, None, S.RESOLVED.value, S.CLOSED.value,
-                       f"Auto-closed: no response from reporter within {days} days")
+                       f"Closed automatically: no reply from the reporter within {days} days")
     await db.commit()
     return len(tickets)

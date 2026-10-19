@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { getApiError, ticketsApi, type DashboardSummary } from '@/lib/api';
+import { priorityLabel, statusLabel, statusVariant } from '@/lib/tickets';
 
 export const DashboardPage: React.FC = () => {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -24,10 +25,10 @@ export const DashboardPage: React.FC = () => {
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Campus Operations Dashboard</h1>
-          <p className="text-muted-foreground text-sm mt-1">Your current campus grievance activity.</p>
+          <h1 className="text-3xl font-bold tracking-tight">My Dashboard</h1>
+          <p className="text-muted-foreground text-sm mt-1">Your tickets at a glance.</p>
         </div>
-        <Link to="/tickets/new"><Button className="gap-2"><PlusCircle className="h-4 w-4" /> Submit New Complaint</Button></Link>
+        <Link to="/tickets/new"><Button className="gap-2"><PlusCircle className="h-4 w-4" /> Report a Problem</Button></Link>
       </div>
 
       {error && <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
@@ -40,12 +41,12 @@ export const DashboardPage: React.FC = () => {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between"><div><CardTitle className="text-lg font-bold">Recent Tickets</CardTitle><CardDescription>Latest tickets visible to your account.</CardDescription></div><Badge variant="outline">Live</Badge></div>
+          <div className="flex items-center justify-between"><div><CardTitle className="text-lg font-bold">Recent Tickets</CardTitle><CardDescription>Your most recent tickets.</CardDescription></div></div>
         </CardHeader>
         <CardContent>
           {!summary && !error && <p className="py-10 text-center text-sm text-muted-foreground">Loading tickets...</p>}
           {summary && summary.recent_tickets.length === 0 && <div className="text-center py-10 border border-dashed rounded-lg text-muted-foreground"><TicketIcon className="h-10 w-10 mx-auto mb-3" /><p className="text-sm">No tickets yet.</p></div>}
-          <div className="space-y-3">{summary?.recent_tickets.map((ticket) => <Link key={ticket.id} to={`/tickets/${ticket.ticket_number}`} className="block rounded-lg border p-4 hover:border-primary/50"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-mono text-xs font-bold text-primary">{ticket.ticket_number}</span><Badge variant={ticket.status === 'RESOLVED' || ticket.status === 'CLOSED' ? 'success' : 'warning'}>{ticket.status}</Badge></div><p className="mt-2 font-semibold">{ticket.title}</p><p className="text-xs text-muted-foreground mt-1">{ticket.category} | {ticket.priority} | {ticket.location}</p></Link>)}</div>
+          <div className="space-y-3">{summary?.recent_tickets.map((ticket) => <Link key={ticket.id} to={`/tickets/${ticket.ticket_number}`} className="block rounded-lg border p-4 hover:border-primary/50"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-mono text-xs font-bold text-primary">{ticket.ticket_number}</span><Badge variant={statusVariant(ticket.status)}>{statusLabel(ticket.status)}</Badge></div><p className="mt-2 font-semibold">{ticket.title}</p><p className="text-xs text-muted-foreground mt-1">{ticket.category} | {priorityLabel(ticket.priority)} priority | {ticket.location}</p></Link>)}</div>
         </CardContent>
       </Card>
     </div>

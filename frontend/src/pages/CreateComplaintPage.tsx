@@ -4,6 +4,7 @@ import { ArrowLeft, Send, TicketPlus } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CATEGORY_OPTIONS, getApiError, ticketsApi, type TicketPriority } from '@/lib/api';
+import { PRIORITIES, priorityLabel } from '@/lib/tickets';
 
 export const CreateComplaintPage: React.FC = () => {
   const navigate = useNavigate();
@@ -36,19 +37,19 @@ export const CreateComplaintPage: React.FC = () => {
       </Button>
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><TicketPlus className="h-5 w-5 text-primary" /> Create Complaint</CardTitle>
-          <CardDescription>Submit a campus issue for review. AI analysis pending.</CardDescription>
+          <CardTitle className="flex items-center gap-2"><TicketPlus className="h-5 w-5 text-primary" /> Report a Problem</CardTitle>
+          <CardDescription>Tell us what's wrong and where. We'll pass it to the right team.</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-5" onSubmit={handleSubmit}>
             {error && <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
             <div className="space-y-2">
               <label htmlFor="title" className="text-sm font-medium">Title</label>
-              <input id="title" required minLength={5} value={form.title} onChange={(event) => updateField('title', event.target.value)} className="w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="Briefly describe the issue" />
+              <input id="title" required minLength={5} value={form.title} onChange={(event) => updateField('title', event.target.value)} className="w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="For example: Projector not working in Room 204" />
             </div>
             <div className="space-y-2">
               <label htmlFor="description" className="text-sm font-medium">Description</label>
-              <textarea id="description" required minLength={10} rows={6} value={form.description} onChange={(event) => updateField('description', event.target.value)} className="w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="Describe what happened and how it affects campus users" />
+              <textarea id="description" required minLength={10} rows={6} value={form.description} onChange={(event) => updateField('description', event.target.value)} className="w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="What's wrong, since when, and who is affected?" />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
@@ -58,17 +59,17 @@ export const CreateComplaintPage: React.FC = () => {
                 </select>
               </div>
               <div className="space-y-2">
-                <label htmlFor="priority" className="text-sm font-medium">Priority</label>
+                <label htmlFor="priority" className="text-sm font-medium">How urgent is it?</label>
                 <select id="priority" value={form.priority} onChange={(event) => updateField('priority', event.target.value)} className="w-full rounded-lg border bg-background px-3 py-2 text-sm">
-                  {(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as TicketPriority[]).map((priority) => <option key={priority}>{priority}</option>)}
+                  {PRIORITIES.map((priority) => <option key={priority} value={priority}>{priorityLabel(priority)}</option>)}
                 </select>
               </div>
             </div>
             <div className="space-y-2">
               <label htmlFor="location" className="text-sm font-medium">Location</label>
-              <input id="location" required minLength={2} value={form.location} onChange={(event) => updateField('location', event.target.value)} className="w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="Building, room, or campus area" />
+              <input id="location" required minLength={2} value={form.location} onChange={(event) => updateField('location', event.target.value)} className="w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="Building and room, e.g. B Block, Room 204" />
             </div>
-            <Button type="submit" className="gap-2" disabled={isSubmitting}><Send className="h-4 w-4" /> {isSubmitting ? 'Submitting...' : 'Submit Complaint'}</Button>
+            <Button type="submit" className="gap-2" disabled={isSubmitting}><Send className="h-4 w-4" /> {isSubmitting ? 'Sending...' : 'Send Report'}</Button>
           </form>
         </CardContent>
       </Card>

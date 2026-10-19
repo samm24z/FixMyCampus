@@ -16,9 +16,8 @@ import {
   type TicketStatus,
   type User as AppUser,
 } from '@/lib/api';
-import { statusVariant } from '@/lib/tickets';
+import { PRIORITIES, priorityLabel, roleLabel, statusLabel, statusVariant } from '@/lib/tickets';
 
-const PRIORITIES: TicketPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 const selectClass = 'mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm';
 
 export const TicketDetailPage: React.FC = () => {
@@ -109,8 +108,8 @@ export const TicketDetailPage: React.FC = () => {
       <div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-md">{ticket.ticket_number}</span>
-          <Badge variant={statusVariant(ticket.status)}>{ticket.status}</Badge>
-          <Badge variant={ticket.priority === 'CRITICAL' ? 'destructive' : 'outline'}>{ticket.priority}</Badge>
+          <Badge variant={statusVariant(ticket.status)}>{statusLabel(ticket.status)}</Badge>
+          <Badge variant={ticket.priority === 'CRITICAL' ? 'destructive' : 'outline'}>{priorityLabel(ticket.priority)} priority</Badge>
         </div>
         <h1 className="text-2xl sm:text-3xl font-bold mt-2">{ticket.title}</h1>
       </div>
@@ -118,42 +117,35 @@ export const TicketDetailPage: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-6">
           <Card>
-            <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><FileText className="h-4 w-4 text-primary" /> Complaint Details</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><FileText className="h-4 w-4 text-primary" /> What's wrong</CardTitle></CardHeader>
             <CardContent className="space-y-4 text-sm">
               <p className="text-muted-foreground leading-relaxed">{ticket.description}</p>
               <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground pt-2 border-t">
                 <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5 text-primary" /> {ticket.location}</span>
                 <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5 text-primary" /> {new Date(ticket.created_at).toLocaleString()}</span>
-                {ticket.sla_deadline && <span className="flex items-center gap-1"><CalendarClock className="h-3.5 w-3.5 text-primary" /> SLA due {new Date(ticket.sla_deadline).toLocaleString()}</span>}
+                {ticket.sla_deadline && <span className="flex items-center gap-1"><CalendarClock className="h-3.5 w-3.5 text-primary" /> Fix by {new Date(ticket.sla_deadline).toLocaleString()}</span>}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-indigo-500/30 bg-indigo-50/20 dark:bg-indigo-950/10">
-            <CardHeader>
-              <CardTitle className="text-base font-bold text-indigo-600 dark:text-indigo-400">AI analysis pending</CardTitle>
-              <CardDescription>No AI output has been generated for this ticket.</CardDescription>
-            </CardHeader>
-          </Card>
-
           {permissions.can_edit_triage && (
             <Card>
-              <CardHeader><CardTitle className="text-base font-bold">Triage</CardTitle><CardDescription>Confirm or correct the classification. Changes recalculate the SLA.</CardDescription></CardHeader>
+              <CardHeader><CardTitle className="text-base font-bold">Category and Priority</CardTitle><CardDescription>Correct these if needed. Changing them also updates the fix-by date.</CardDescription></CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2">
                 <label className="text-xs font-medium">Category
                   <select value={category} onChange={(event) => setCategory(event.target.value)} className={selectClass}>{CATEGORY_OPTIONS.map((item) => <option key={item}>{item}</option>)}</select>
                 </label>
                 <label className="text-xs font-medium">Priority
-                  <select value={priority} onChange={(event) => setPriority(event.target.value as TicketPriority)} className={selectClass}>{PRIORITIES.map((item) => <option key={item}>{item}</option>)}</select>
+                  <select value={priority} onChange={(event) => setPriority(event.target.value as TicketPriority)} className={selectClass}>{PRIORITIES.map((item) => <option key={item} value={item}>{priorityLabel(item)}</option>)}</select>
                 </label>
-                <Button className="sm:col-span-2" disabled={isSaving || (category === ticket.category && priority === ticket.priority)} onClick={() => perform(() => ticketsApi.triage(ref, { category, priority }))}>Save Triage</Button>
+                <Button className="sm:col-span-2" disabled={isSaving || (category === ticket.category && priority === ticket.priority)} onClick={() => perform(() => ticketsApi.triage(ref, { category, priority }))}>Save Changes</Button>
               </CardContent>
             </Card>
           )}
 
           {permissions.can_assign && (
             <Card>
-              <CardHeader><CardTitle className="text-base font-bold">Assignment</CardTitle><CardDescription>Currently: {ticket.assigned_to_name || 'unassigned'}{ticket.department_name ? ` (${ticket.department_name})` : ''}</CardDescription></CardHeader>
+              <CardHeader><CardTitle className="text-base font-bold">Assign to Staff</CardTitle><CardDescription>Currently: {ticket.assigned_to_name || 'not assigned'}{ticket.department_name ? ` (${ticket.department_name})` : ''}</CardDescription></CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2">
                 <label className="text-xs font-medium">Department
                   <select value={departmentId} onChange={(event) => { setDepartmentId(event.target.value); setAssignee(''); }} className={selectClass}>
@@ -163,7 +155,7 @@ export const TicketDetailPage: React.FC = () => {
                 </label>
                 <label className="text-xs font-medium">Staff member
                   <select value={assignee} onChange={(event) => setAssignee(event.target.value)} className={selectClass}>
-                    <option value="">Select staff...</option>
+                    <option value="">Choose a staff member...</option>
                     {visibleStaff.map((member) => <option key={member.id} value={member.id}>{member.full_name}{departmentName(member.department_id) ? ` - ${departmentName(member.department_id)}` : ''}</option>)}
                   </select>
                 </label>
@@ -176,14 +168,14 @@ export const TicketDetailPage: React.FC = () => {
             <Card>
               <CardHeader><CardTitle className="text-base font-bold">Update Status</CardTitle></CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2">
-                <label className="text-xs font-medium">Move to
+                <label className="text-xs font-medium">New status
                   <select value={nextStatus} onChange={(event) => setNextStatus(event.target.value as TicketStatus)} className={selectClass}>
-                    <option value="">Select status...</option>
-                    {permissions.allowed_statuses.map((item) => <option key={item}>{item}</option>)}
+                    <option value="">Choose a status...</option>
+                    {permissions.allowed_statuses.map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}
                   </select>
                 </label>
-                <label className="text-xs font-medium">Remarks{remarksRequired ? ' (required)' : ' (optional)'}
-                  <input value={remarks} onChange={(event) => setRemarks(event.target.value)} className={selectClass} placeholder="What changed?" />
+                <label className="text-xs font-medium">Note{remarksRequired ? ' (required)' : ' (optional)'}
+                  <input value={remarks} onChange={(event) => setRemarks(event.target.value)} className={selectClass} placeholder={nextStatus === 'CLOSED' ? 'Why is this ticket being turned down?' : 'What was done?'} />
                 </label>
                 <Button className="sm:col-span-2" disabled={isSaving || !nextStatus || (remarksRequired && !remarks.trim())} onClick={() => perform(() => ticketsApi.changeStatus(ref, nextStatus as TicketStatus, remarks))}>Update Status</Button>
               </CardContent>
@@ -192,7 +184,7 @@ export const TicketDetailPage: React.FC = () => {
 
           {(permissions.can_give_feedback || ticket.feedback) && (
             <Card>
-              <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><Star className="h-4 w-4 text-primary" /> Resolution Feedback</CardTitle>{permissions.can_give_feedback && <CardDescription>How well was this resolved?</CardDescription>}</CardHeader>
+              <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><Star className="h-4 w-4 text-primary" /> Rate the Fix</CardTitle>{permissions.can_give_feedback && <CardDescription>How happy are you with how this was fixed?</CardDescription>}</CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex gap-1" role="radiogroup" aria-label="Rating">
                   {[1, 2, 3, 4, 5].map((value) => (
@@ -204,7 +196,7 @@ export const TicketDetailPage: React.FC = () => {
                 {permissions.can_give_feedback ? (
                   <>
                     <textarea value={feedbackComments} onChange={(event) => setFeedbackComments(event.target.value)} maxLength={2000} rows={3} placeholder="Comments (optional)" className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-                    <Button disabled={isSaving || rating === 0 || (rating === ticket.feedback?.rating && feedbackComments === (ticket.feedback?.comments ?? ''))} onClick={() => perform(() => ticketsApi.submitFeedback(ref, rating, feedbackComments))}>{ticket.feedback ? 'Update Feedback' : 'Submit Feedback'}</Button>
+                    <Button disabled={isSaving || rating === 0 || (rating === ticket.feedback?.rating && feedbackComments === (ticket.feedback?.comments ?? ''))} onClick={() => perform(() => ticketsApi.submitFeedback(ref, rating, feedbackComments))}>{ticket.feedback ? 'Update Rating' : 'Send Rating'}</Button>
                   </>
                 ) : (
                   ticket.feedback?.comments && <p className="text-sm text-muted-foreground">{ticket.feedback.comments}</p>
@@ -222,8 +214,8 @@ export const TicketDetailPage: React.FC = () => {
                   <div key={item.id} className={`rounded-lg border p-3 ${item.is_internal ? 'border-amber-500/40 bg-amber-500/5' : ''}`}>
                     <div className="mb-1 flex items-center gap-2 text-xs font-semibold">
                       {item.author_name || 'Unknown'}
-                      {item.author_role && <span className="font-normal text-muted-foreground">{item.author_role}</span>}
-                      {item.is_internal && <Badge variant="warning">Internal</Badge>}
+                      {item.author_role && <span className="font-normal text-muted-foreground">{roleLabel(item.author_role)}</span>}
+                      {item.is_internal && <Badge variant="warning">Staff only</Badge>}
                     </div>
                     <p className="text-sm">{item.content}</p>
                     <p className="mt-2 text-xs text-muted-foreground">{new Date(item.created_at).toLocaleString()}</p>
@@ -233,36 +225,36 @@ export const TicketDetailPage: React.FC = () => {
               {permissions.can_comment && (
                 <div className="space-y-2">
                   <div className="flex gap-2">
-                    <input value={comment} onChange={(event) => setComment(event.target.value)} placeholder={isInternal ? 'Add an internal note (hidden from the reporter)' : 'Add a comment'} className="flex-1 rounded-lg border bg-background px-3 py-2 text-sm" />
+                    <input value={comment} onChange={(event) => setComment(event.target.value)} placeholder={isInternal ? 'Add a note only staff can see' : 'Add a comment'} className="flex-1 rounded-lg border bg-background px-3 py-2 text-sm" />
                     <Button size="icon" disabled={!comment.trim() || isSaving} onClick={() => perform(() => ticketsApi.comment(ref, comment, isInternal), () => setComment(''))}><Send className="h-4 w-4" /></Button>
                   </div>
                   {permissions.can_comment_internal && (
-                    <label className="flex items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={isInternal} onChange={(event) => setIsInternal(event.target.checked)} /> Internal note (staff only)</label>
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={isInternal} onChange={(event) => setIsInternal(event.target.checked)} /> Only staff can see this note</label>
                   )}
                 </div>
               )}
-              {!permissions.can_comment && ticket.status === 'CLOSED' && <p className="text-sm text-muted-foreground">Ticket is closed.</p>}
+              {!permissions.can_comment && ticket.status === 'CLOSED' && <p className="text-sm text-muted-foreground">This ticket is closed. Reopen it to add a comment.</p>}
             </CardContent>
           </Card>
         </div>
 
         <div className="space-y-6">
           <Card>
-            <CardHeader><CardTitle className="text-base font-bold">Metadata</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base font-bold">Details</CardTitle></CardHeader>
             <CardContent className="space-y-4 text-xs">
-              <div><span className="text-muted-foreground block">Reporter</span><span className="font-medium flex items-center gap-1 mt-0.5"><User className="h-3.5 w-3.5 text-primary" /> {ticket.created_by_name}</span></div>
+              <div><span className="text-muted-foreground block">Reported by</span><span className="font-medium flex items-center gap-1 mt-0.5"><User className="h-3.5 w-3.5 text-primary" /> {ticket.created_by_name}</span></div>
               <div><span className="text-muted-foreground block">Category</span><span className="font-medium mt-0.5 block">{ticket.category}</span></div>
               <div><span className="text-muted-foreground block">Department</span><span className="font-medium flex items-center gap-1 mt-0.5"><Building2 className="h-3.5 w-3.5 text-primary" /> {ticket.department_name || 'Not assigned'}</span></div>
-              <div><span className="text-muted-foreground block">Assignment</span><span className="font-medium mt-0.5 block">{ticket.assigned_to_name || 'Unassigned'}</span></div>
+              <div><span className="text-muted-foreground block">Assigned to</span><span className="font-medium mt-0.5 block">{ticket.assigned_to_name || 'Not assigned yet'}</span></div>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-base font-bold">Timeline</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base font-bold">History</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              {ticket.history.length === 0 && <p className="text-xs text-muted-foreground">No status history.</p>}
+              {ticket.history.length === 0 && <p className="text-xs text-muted-foreground">No updates yet.</p>}
               {ticket.history.map((item) => (
                 <div key={item.id} className="border-l-2 border-primary/30 pl-3">
-                  <p className="text-xs font-semibold">{item.to_status}{item.changed_by === null && <span className="font-normal text-muted-foreground"> - System</span>}</p>
+                  <p className="text-xs font-semibold">{statusLabel(item.to_status)}{item.changed_by === null && <span className="font-normal text-muted-foreground"> - automatic</span>}</p>
                   {item.remarks && <p className="text-[11px] text-foreground">{item.remarks}</p>}
                   <p className="text-[11px] text-muted-foreground">{new Date(item.created_at).toLocaleString()}</p>
                 </div>
@@ -271,15 +263,15 @@ export const TicketDetailPage: React.FC = () => {
           </Card>
           {permissions.can_confirm && (
             <Card className="border-emerald-500/30">
-              <CardHeader><CardTitle className="text-base font-bold">Is the issue fixed?</CardTitle><CardDescription>Confirm to close this ticket. Otherwise it closes by itself a few days after being resolved.</CardDescription></CardHeader>
-              <CardContent><Button className="w-full gap-2" disabled={isSaving} onClick={() => perform(() => ticketsApi.confirm(ref))}><CheckCircle2 className="h-4 w-4" /> Confirm Fixed</Button></CardContent>
+              <CardHeader><CardTitle className="text-base font-bold">Is the issue fixed?</CardTitle><CardDescription>If it's fixed, confirm to close the ticket. If you don't reply, it will close by itself after a few days.</CardDescription></CardHeader>
+              <CardContent><Button className="w-full gap-2" disabled={isSaving} onClick={() => perform(() => ticketsApi.confirm(ref))}><CheckCircle2 className="h-4 w-4" /> Yes, it's fixed</Button></CardContent>
             </Card>
           )}
           {permissions.can_withdraw && (
             <Card>
               <CardContent className="space-y-2 pt-6">
-                <input value={withdrawReason} onChange={(event) => setWithdrawReason(event.target.value)} placeholder="Reason for withdrawing (optional)" className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-                <Button variant="outline" className="w-full gap-2" disabled={isSaving} onClick={() => perform(() => ticketsApi.withdraw(ref, withdrawReason), () => setWithdrawReason(''))}><Undo2 className="h-4 w-4" /> Withdraw Ticket</Button>
+                <input value={withdrawReason} onChange={(event) => setWithdrawReason(event.target.value)} placeholder="Why are you cancelling? (optional)" className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                <Button variant="outline" className="w-full gap-2" disabled={isSaving} onClick={() => perform(() => ticketsApi.withdraw(ref, withdrawReason), () => setWithdrawReason(''))}><Undo2 className="h-4 w-4" /> Cancel This Ticket</Button>
               </CardContent>
             </Card>
           )}
@@ -287,7 +279,7 @@ export const TicketDetailPage: React.FC = () => {
             <Card>
               <CardContent className="space-y-2 pt-6">
                 <input value={reopenReason} onChange={(event) => setReopenReason(event.target.value)} placeholder="Why is it not fixed? (optional)" className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-                <Button variant="outline" className="w-full gap-2" disabled={isSaving} onClick={() => perform(() => ticketsApi.reopen(ref, reopenReason), () => setReopenReason(''))}><RotateCcw className="h-4 w-4" /> Request Reopen</Button>
+                <Button variant="outline" className="w-full gap-2" disabled={isSaving} onClick={() => perform(() => ticketsApi.reopen(ref, reopenReason), () => setReopenReason(''))}><RotateCcw className="h-4 w-4" /> Reopen Ticket</Button>
               </CardContent>
             </Card>
           )}

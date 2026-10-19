@@ -4,6 +4,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { getApiError, departmentsApi, usersApi, type Department, type Paginated, type Role, type User } from '@/lib/api';
+import { roleLabel } from '@/lib/tickets';
 import { useAuth } from '@/lib/auth';
 
 const ROLES: Role[] = ['STUDENT', 'FACULTY', 'STAFF', 'COORDINATOR', 'ADMIN'];
@@ -54,15 +55,15 @@ export const UserManagement: React.FC = () => {
         >
           <input required placeholder="Full name" value={draft.full_name} onChange={(event) => setDraft({ ...draft, full_name: event.target.value })} className={`${field} sm:col-span-2`} />
           <input required type="email" placeholder="Email" value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value })} className={`${field} sm:col-span-2`} />
-          <input required minLength={8} type="password" placeholder="Initial password" value={draft.password} onChange={(event) => setDraft({ ...draft, password: event.target.value })} className={`${field} sm:col-span-2`} />
-          <select value={draft.role} onChange={(event) => setDraft({ ...draft, role: event.target.value as Role })} className={`${field} sm:col-span-2`}>{ROLES.map((role) => <option key={role}>{role}</option>)}</select>
+          <input required minLength={8} type="password" placeholder="Temporary password" value={draft.password} onChange={(event) => setDraft({ ...draft, password: event.target.value })} className={`${field} sm:col-span-2`} />
+          <select value={draft.role} onChange={(event) => setDraft({ ...draft, role: event.target.value as Role })} className={`${field} sm:col-span-2`}>{ROLES.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}</select>
           <select value={draft.department_id} onChange={(event) => setDraft({ ...draft, department_id: event.target.value })} className={`${field} sm:col-span-2`}><option value="">No department</option>{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select>
           <Button type="submit" size="sm" className="sm:col-span-2">Add User</Button>
         </form>
 
         <div className="flex flex-col gap-2 sm:flex-row">
           <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search name or email" className={`${field} flex-1`} />
-          <select value={roleFilter} onChange={(event) => { setRoleFilter(event.target.value as Role | ''); setPage(1); }} className={field} aria-label="Filter by role"><option value="">All roles</option>{ROLES.map((role) => <option key={role}>{role}</option>)}</select>
+          <select value={roleFilter} onChange={(event) => { setRoleFilter(event.target.value as Role | ''); setPage(1); }} className={field} aria-label="Filter by role"><option value="">All roles</option>{ROLES.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}</select>
         </div>
 
         <div className="space-y-2">
@@ -71,7 +72,7 @@ export const UserManagement: React.FC = () => {
             return (
               <div key={account.id} className="grid items-center gap-2 rounded-lg border p-3 text-sm sm:grid-cols-12">
                 <div className="sm:col-span-4"><p className="font-medium">{account.full_name} {isSelf && <Badge variant="outline">You</Badge>}</p><p className="text-xs text-muted-foreground">{account.email}</p></div>
-                <select disabled={isSelf} value={account.role} onChange={(event) => void save(() => usersApi.update(account.id, { role: event.target.value as Role }))} className={`${field} sm:col-span-2`} aria-label={`Role for ${account.full_name}`}>{ROLES.map((role) => <option key={role}>{role}</option>)}</select>
+                <select disabled={isSelf} value={account.role} onChange={(event) => void save(() => usersApi.update(account.id, { role: event.target.value as Role }))} className={`${field} sm:col-span-2`} aria-label={`Role for ${account.full_name}`}>{ROLES.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}</select>
                 <select value={account.department_id ?? ''} onChange={(event) => void save(() => usersApi.update(account.id, { department_id: event.target.value || null }))} className={`${field} sm:col-span-3`} aria-label={`Department for ${account.full_name}`}><option value="">No department</option>{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select>
                 <div className="sm:col-span-3 flex items-center justify-between gap-2"><Badge variant={account.is_active ? 'success' : 'secondary'}>{account.is_active ? 'Active' : 'Inactive'}</Badge><Button variant="outline" size="sm" disabled={isSelf} onClick={() => void save(() => usersApi.update(account.id, { is_active: !account.is_active }))}>{account.is_active ? 'Deactivate' : 'Reactivate'}</Button></div>
               </div>
