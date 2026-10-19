@@ -42,6 +42,10 @@ export interface Ticket {
   confirmed_category: string | null;
   confirmed_department_id: string | null;
   ai_confidence: number | null;
+  report_count: number;
+  parent_ticket_id: string | null;
+  /** Only coordinators and admins get this. */
+  parent_ticket_number: string | null;
   created_by: string;
   assigned_to: string | null;
   sla_deadline: string | null;
@@ -81,6 +85,8 @@ export interface TicketPermissions {
   can_confirm: boolean;
   can_withdraw: boolean;
   can_give_feedback: boolean;
+  can_review_suggestions: boolean;
+  can_split_group: boolean;
   statuses_requiring_remarks: TicketStatus[];
 }
 
@@ -88,6 +94,35 @@ export interface TicketFeedback {
   id: string;
   rating: number;
   comments: string | null;
+  created_at: string;
+}
+
+/** What the system suggests for a ticket; coordinators and admins only. */
+export interface TicketSuggestions {
+  status: 'pending' | 'done' | 'failed';
+  category: string | null;
+  priority: TicketPriority | null;
+  department_id: string | null;
+  department_name: string | null;
+  confidence: number | null;
+  reason: string | null;
+  source: 'gemini' | 'keywords' | null;
+  analyzed_at: string | null;
+}
+
+export interface PossibleDuplicate {
+  ticket_id: string;
+  ticket_number: string;
+  title: string;
+  similarity_score: number;
+  status: TicketStatus;
+}
+
+export interface GroupMember {
+  ticket_id: string;
+  ticket_number: string;
+  title: string;
+  status: TicketStatus;
   created_at: string;
 }
 
@@ -99,6 +134,9 @@ export interface TicketDetail extends Ticket {
   history: TicketHistoryEntry[];
   feedback: TicketFeedback | null;
   permissions: TicketPermissions;
+  suggestions: TicketSuggestions | null;
+  duplicates: PossibleDuplicate[];
+  group_members: GroupMember[];
 }
 
 export interface Paginated<T> {
@@ -241,6 +279,11 @@ export const ticketsApi = {
     api.post<TicketDetail>(`/tickets/${ref}/withdraw`, { reason: reason || null }),
   submitFeedback: (ref: string, rating: number, comments?: string) =>
     api.post<TicketDetail>(`/tickets/${ref}/feedback`, { rating, comments: comments || null }),
+  acceptSuggestions: (ref: string) => api.post<TicketDetail>(`/tickets/${ref}/suggestions/accept`),
+  refreshSuggestions: (ref: string) => api.post<TicketDetail>(`/tickets/${ref}/suggestions/refresh`),
+  sameProblem: (ref: string, otherRef: string) => api.post<TicketDetail>(`/tickets/${ref}/duplicates/${otherRef}/group`),
+  notSameProblem: (ref: string, otherRef: string) => api.post<TicketDetail>(`/tickets/${ref}/duplicates/${otherRef}/dismiss`),
+  splitFromGroup: (ref: string) => api.post<TicketDetail>(`/tickets/${ref}/group/split`),
 };
 
 /** Drop empty filter values so they are not sent as `?status=`. */

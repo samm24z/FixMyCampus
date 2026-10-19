@@ -2,6 +2,8 @@
 
 from ai.interfaces import (
     BaseClassifierService,
+    BaseEmbeddingService,
+    BaseSuggestionService,
     BaseDeduplicationService,
     BasePriorityService,
     BaseRAGService,
@@ -13,10 +15,13 @@ from ai.schemas import (
     RAGQueryRequest,
     RAGQueryResponse,
     SourceCitation,
+    TicketSuggestion,
 )
 
 __all__ = [
     "BaseClassifierService",
+    "BaseEmbeddingService",
+    "BaseSuggestionService",
     "BaseDeduplicationService",
     "BasePriorityService",
     "BaseRAGService",
@@ -26,4 +31,5 @@ __all__ = [
     "RAGQueryRequest",
     "RAGQueryResponse",
     "SourceCitation",
+    "TicketSuggestion",
 ]

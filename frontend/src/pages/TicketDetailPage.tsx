@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Clock, MapPin, User, Building2, FileText, Send, RotateCcw, CalendarClock, CheckCircle2, Star, Undo2 } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, Clock, MapPin, User, Building2, FileText, Send, RotateCcw, CalendarClock, CheckCircle2, Star, Undo2, Sparkles, Copy, Users, Scissors } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +16,7 @@ import {
   type TicketStatus,
   type User as AppUser,
 } from '@/lib/api';
-import { PRIORITIES, priorityLabel, roleLabel, statusLabel, statusVariant } from '@/lib/tickets';
+import { PRIORITIES, confidenceLabel, priorityLabel, reportsLabel, roleLabel, similarityLabel, statusLabel, statusVariant } from '@/lib/tickets';
 
 const selectClass = 'mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm';
 
@@ -71,6 +71,20 @@ export const TicketDetailPage: React.FC = () => {
     departmentsApi.list().then((response) => setDepartments(response.data)).catch(() => undefined);
   }, [canAssign]);
 
+  // Suggestions are prepared in the background right after a report is filed: check back a few times.
+  const suggestionsPending = ticket?.suggestions?.status === 'pending';
+  const ticketRef = ticket?.ticket_number;
+  useEffect(() => {
+    if (!suggestionsPending || !ticketRef) return;
+    let attempts = 0;
+    const timer = setInterval(() => {
+      attempts += 1;
+      ticketsApi.detail(ticketRef).then((response) => setTicket(response.data)).catch(() => undefined);
+      if (attempts >= 8) clearInterval(timer);
+    }, 2500);
+    return () => clearInterval(timer);
+  }, [suggestionsPending, ticketRef]);
+
   /** Run a mutation; every ticket endpoint returns the refreshed ticket, so no reload is needed. */
   async function perform(action: () => Promise<{ data: TicketDetail }>, onDone?: () => void) {
     setError('');
@@ -99,6 +113,12 @@ export const TicketDetailPage: React.FC = () => {
   const ref = ticket.ticket_number;
   const remarksRequired = !!nextStatus && permissions.statuses_requiring_remarks.includes(nextStatus);
   const visibleStaff = departmentId ? staff.filter((member) => member.department_id === departmentId) : staff;
+  const { suggestions } = ticket;
+  const suggestionsDiffer = !!suggestions && (
+    suggestions.category !== ticket.category ||
+    suggestions.priority !== ticket.priority ||
+    (!!suggestions.department_id && suggestions.department_id !== ticket.confirmed_department_id)
+  );
   const departmentName = (departmentId: string | null) => departments.find((item) => item.id === departmentId)?.name;
 
   return (
@@ -110,8 +130,13 @@ export const TicketDetailPage: React.FC = () => {
           <span className="font-mono text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-md">{ticket.ticket_number}</span>
           <Badge variant={statusVariant(ticket.status)}>{statusLabel(ticket.status)}</Badge>
           <Badge variant={ticket.priority === 'CRITICAL' ? 'destructive' : 'outline'}>{priorityLabel(ticket.priority)} priority</Badge>
+          {ticket.report_count > 1 && permissions.can_review_suggestions && <Badge variant="warning">{reportsLabel(ticket.report_count)}</Badge>}
+          {ticket.parent_ticket_id && permissions.can_review_suggestions && <Badge variant="outline">Grouped</Badge>}
         </div>
         <h1 className="text-2xl sm:text-3xl font-bold mt-2">{ticket.title}</h1>
+        {!permissions.can_review_suggestions && (ticket.report_count > 1 || ticket.parent_ticket_id) && (
+          <p className="mt-2 flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-sm"><Users className="h-4 w-4 text-primary" /> Other people reported the same problem. We're fixing them together.</p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -127,6 +152,52 @@ export const TicketDetailPage: React.FC = () => {
               </div>
             </CardContent>
           </Card>
+
+          {permissions.can_review_suggestions && (
+            <Card>
+              <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /> Suggestions</CardTitle><CardDescription>A starting point only. You decide the category, priority and department.</CardDescription></CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                {!suggestions && <p className="text-muted-foreground">No suggestions for this ticket yet.</p>}
+                {suggestions?.status === 'pending' && <p className="text-muted-foreground">Preparing suggestions...</p>}
+                {suggestions?.status === 'failed' && <p className="text-muted-foreground">Suggestions couldn't be prepared for this ticket. You can try again.</p>}
+                {suggestions?.status === 'done' && (
+                  <>
+                    <dl className="grid gap-3 sm:grid-cols-3">
+                      <div><dt className="text-xs text-muted-foreground">Category</dt><dd className="font-medium">{suggestions.category}</dd></div>
+                      <div><dt className="text-xs text-muted-foreground">Priority</dt><dd className="font-medium">{suggestions.priority ? priorityLabel(suggestions.priority) : '-'}</dd></div>
+                      <div><dt className="text-xs text-muted-foreground">Department</dt><dd className="font-medium">{suggestions.department_name || '-'}</dd></div>
+                    </dl>
+                    {suggestions.confidence !== null && <p className="text-xs text-muted-foreground">{confidenceLabel(suggestions.confidence)}{suggestions.source === 'keywords' ? ' - based on keywords' : ''}</p>}
+                    {suggestions.reason && <p className="text-muted-foreground">{suggestions.reason}</p>}
+                  </>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {suggestions?.status === 'done' && <Button size="sm" disabled={isSaving || !suggestionsDiffer} onClick={() => perform(() => ticketsApi.acceptSuggestions(ref))}>Use these suggestions</Button>}
+                  <Button size="sm" variant="outline" disabled={isSaving || suggestions?.status === 'pending'} onClick={() => perform(() => ticketsApi.refreshSuggestions(ref))}>Refresh suggestions</Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {permissions.can_review_suggestions && ticket.duplicates.length > 0 && (
+            <Card>
+              <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><Copy className="h-4 w-4 text-primary" /> Possible duplicates</CardTitle><CardDescription>These open tickets sound like the same problem. Reports you confirm are grouped and fixed together.</CardDescription></CardHeader>
+              <CardContent className="space-y-3">
+                {ticket.duplicates.map((item) => (
+                  <div key={item.ticket_id} className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0 text-sm">
+                      <div className="flex flex-wrap items-center gap-2"><Link to={`/tickets/${item.ticket_number}`} className="font-mono text-xs font-bold text-primary hover:underline">{item.ticket_number}</Link><Badge variant={statusVariant(item.status)}>{statusLabel(item.status)}</Badge><span className="text-xs text-muted-foreground">{similarityLabel(item.similarity_score)}</span></div>
+                      <p className="mt-1 truncate font-medium">{item.title}</p>
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <Button size="sm" disabled={isSaving} onClick={() => perform(() => ticketsApi.sameProblem(ref, item.ticket_number))}>Same problem</Button>
+                      <Button size="sm" variant="outline" disabled={isSaving} onClick={() => perform(() => ticketsApi.notSameProblem(ref, item.ticket_number))}>Not the same</Button>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
           {permissions.can_edit_triage && (
             <Card>
@@ -248,6 +319,25 @@ export const TicketDetailPage: React.FC = () => {
               <div><span className="text-muted-foreground block">Assigned to</span><span className="font-medium mt-0.5 block">{ticket.assigned_to_name || 'Not assigned yet'}</span></div>
             </CardContent>
           </Card>
+          {permissions.can_review_suggestions && (ticket.parent_ticket_id || ticket.group_members.length > 0) && (
+            <Card>
+              <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><Users className="h-4 w-4 text-primary" /> {ticket.parent_ticket_id ? 'Grouped report' : reportsLabel(ticket.report_count)}</CardTitle></CardHeader>
+              <CardContent className="space-y-3 text-xs">
+                {ticket.parent_ticket_id && (
+                  <>
+                    <p>Grouped with <Link to={`/tickets/${ticket.parent_ticket_number}`} className="font-mono font-bold text-primary hover:underline">{ticket.parent_ticket_number}</Link>. Its status follows that ticket, so update that ticket instead.</p>
+                    {permissions.can_split_group && <Button variant="outline" size="sm" className="w-full gap-2" disabled={isSaving} onClick={() => perform(() => ticketsApi.splitFromGroup(ref))}><Scissors className="h-4 w-4" /> Split from group</Button>}
+                  </>
+                )}
+                {ticket.group_members.map((member) => (
+                  <div key={member.ticket_id} className="flex items-center justify-between gap-2 border-t pt-2">
+                    <div className="min-w-0"><Link to={`/tickets/${member.ticket_number}`} className="font-mono font-bold text-primary hover:underline">{member.ticket_number}</Link><p className="truncate text-muted-foreground">{member.title}</p></div>
+                    <Badge variant={statusVariant(member.status)}>{statusLabel(member.status)}</Badge>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
           <Card>
             <CardHeader><CardTitle className="text-base font-bold">History</CardTitle></CardHeader>
             <CardContent className="space-y-3">

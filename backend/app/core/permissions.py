@@ -14,7 +14,7 @@ from typing import Any
 from sqlalchemy import or_, true
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.models.enums import RoleEnum, TicketStatusEnum
+from app.models.enums import PriorityEnum, RoleEnum, TicketStatusEnum
 from app.models.ticket import Ticket
 from app.models.user import User
 
@@ -58,6 +58,13 @@ ASSIGNABLE_STATUSES = {
 PROMOTE_TO_ASSIGNED_STATUSES = {S.NEW.value, S.UNDER_REVIEW.value, S.REOPENED.value}
 REOPENABLE_STATUSES = {S.RESOLVED.value, S.CLOSED.value}
 DONE_STATUSES = {S.RESOLVED.value, S.CLOSED.value}
+# Reports that can still be grouped with a main ticket: anything not yet finished.
+GROUPABLE_STATUSES = {
+    S.NEW.value, S.UNDER_REVIEW.value, S.ASSIGNED.value, S.IN_PROGRESS.value, S.REOPENED.value,
+}
+# Group size at which the main ticket's priority goes up one level, then another.
+ESCALATION_STEPS = (3, 5)
+_PRIORITY_ORDER = [p.value for p in PriorityEnum]
 # A reporter may withdraw a ticket until work has been assigned.
 WITHDRAWABLE_STATUSES = {S.NEW.value, S.UNDER_REVIEW.value}
 
@@ -105,8 +112,33 @@ def can_comment_internal(user: User, ticket: Ticket) -> bool:
     return can_comment(user, ticket) and can_see_internal_notes(user)
 
 
+def can_review_suggestions(user: User) -> bool:
+    """Suggestions, similarity and other people's grouped reports are for coordinators and admins only."""
+    return can_triage(user)
+
+
+def is_group_member(ticket: Ticket) -> bool:
+    """True for a report grouped under a main ticket; the main ticket drives its status."""
+    return ticket.parent_ticket_id is not None
+
+
+def can_split_group(user: User, ticket: Ticket) -> bool:
+    return can_review_suggestions(user) and is_group_member(ticket) and ticket.status != S.CLOSED.value
+
+
+def escalation_level_for(report_count: int) -> int:
+    """0 below 3 reports, 1 for 3-4, 2 for 5 or more."""
+    return sum(report_count >= step for step in ESCALATION_STEPS)
+
+
+def raised_priority(priority: str, levels: int) -> str:
+    """``priority`` moved up ``levels`` steps, capped at Critical. Never lowers."""
+    index = _PRIORITY_ORDER.index(priority) + max(levels, 0)
+    return _PRIORITY_ORDER[min(index, len(_PRIORITY_ORDER) - 1)]
+
+
 def can_assign(user: User, ticket: Ticket) -> bool:
-    return can_triage(user) and ticket.status in ASSIGNABLE_STATUSES
+    return can_triage(user) and ticket.status in ASSIGNABLE_STATUSES and not is_group_member(ticket)
 
 
 def can_edit_triage(user: User, ticket: Ticket) -> bool:
@@ -141,7 +173,9 @@ def requires_remarks(old: str, new: str) -> bool:
 
 
 def allowed_status_transitions(user: User, ticket: Ticket) -> set[str]:
-    """Statuses ``user`` may move ``ticket`` to via the status endpoint."""
+    """Statuses ``user`` may move ``ticket`` to via the status endpoint. None for grouped reports."""
+    if is_group_member(ticket):
+        return set()
     if user.role in TRIAGE_ROLES:
         options = set(_TRIAGE_TRANSITIONS.get(ticket.status, set()))
     elif user.role == STAFF and ticket.assigned_to == user.id:

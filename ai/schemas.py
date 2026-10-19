@@ -13,6 +13,15 @@ class CategoryPrediction(BaseModel):
     confidence_warning: bool = Field(False, description="True if confidence is below threshold")
 
 
+class TicketSuggestion(BaseModel):
+    """Suggested category and priority for a new report."""
+    category: str = Field(..., description="One of the campus categories")
+    priority: str = Field(..., description="LOW, MEDIUM, HIGH, or CRITICAL")
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    reason: str = Field(..., description="One plain sentence explaining the suggestion")
+    source: str = Field(..., description="'gemini' or 'keywords'")
+
+
 class DuplicateCandidate(BaseModel):
     """Candidate duplicate complaint detected via vector similarity."""
     complaint_id: str = Field(..., description="UUID of existing complaint")

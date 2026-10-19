@@ -65,6 +65,9 @@ class TicketRead(TicketBase):
     suggested_department_id: Optional[uuid.UUID] = None
     confirmed_department_id: Optional[uuid.UUID] = None
     ai_confidence: Optional[float] = None
+    report_count: int = 1
+    parent_ticket_id: Optional[uuid.UUID] = None
+    parent_ticket_number: Optional[str] = None  # coordinators and admins only
     status: TicketStatusEnum
     created_by: uuid.UUID
     assigned_to: Optional[uuid.UUID] = None

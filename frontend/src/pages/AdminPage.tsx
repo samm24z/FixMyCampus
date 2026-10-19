@@ -69,7 +69,7 @@ export const AdminPage: React.FC = () => {
                   {tickets.map((ticket) => (
                     <tr key={ticket.id} className="border-b last:border-0 hover:bg-muted/40">
                       <td className="py-2 pr-3"><Link to={`/tickets/${ticket.ticket_number}`} className="font-mono text-xs font-bold text-primary hover:underline">{ticket.ticket_number}</Link></td>
-                      <td className="py-2 pr-3 font-medium">{ticket.title}</td>
+                      <td className="py-2 pr-3 font-medium">{ticket.title}{ticket.report_count > 1 && <Badge variant="warning" className="ml-2">{ticket.report_count} reports</Badge>}{ticket.parent_ticket_id && <Badge variant="outline" className="ml-2">Grouped</Badge>}</td>
                       <td className="py-2 pr-3 text-muted-foreground">{ticket.category}</td>
                       <td className="py-2 pr-3"><Badge variant={priorityVariant(ticket.priority)}>{priorityLabel(ticket.priority)}</Badge></td>
                       <td className="py-2 pr-3"><Badge variant={statusVariant(ticket.status)}>{statusLabel(ticket.status)}</Badge></td>

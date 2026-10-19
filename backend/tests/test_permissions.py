@@ -13,10 +13,10 @@ def user(role, *, department_id=None, uid=None):
     return SimpleNamespace(id=uid or uuid.uuid4(), role=role, department_id=department_id)
 
 
-def ticket(status="NEW", *, created_by=None, assigned_to=None, department_id=None, resolved_at=None):
+def ticket(status="NEW", *, created_by=None, assigned_to=None, department_id=None, resolved_at=None, parent=None):
     return SimpleNamespace(
         status=status, created_by=created_by or uuid.uuid4(), assigned_to=assigned_to,
-        confirmed_department_id=department_id, resolved_at=resolved_at,
+        confirmed_department_id=department_id, resolved_at=resolved_at, parent_ticket_id=parent,
     )
 
 
@@ -150,3 +150,45 @@ def test_department_less_staff_filter_never_compiles_to_is_null():
     # `IS NULL` and exposed every unassigned ticket to staff accounts without a department.
     sql = str(policy.ticket_visibility_filter(user("STAFF")).compile(compile_kwargs={"literal_binds": True}))
     assert "IS NULL" not in sql
+
+
+@pytest.mark.parametrize("count, level", [(1, 0), (2, 0), (3, 1), (4, 1), (5, 2), (12, 2)])
+def test_priority_level_rises_at_three_and_five_reports(count, level):
+    assert policy.escalation_level_for(count) == level
+
+
+@pytest.mark.parametrize("priority, levels, expected", [
+    ("LOW", 1, "MEDIUM"), ("MEDIUM", 1, "HIGH"), ("MEDIUM", 2, "CRITICAL"),
+    ("HIGH", 2, "CRITICAL"), ("CRITICAL", 1, "CRITICAL"), ("HIGH", 0, "HIGH"), ("HIGH", -1, "HIGH"),
+])
+def test_raised_priority_is_capped_and_never_lowers(priority, levels, expected):
+    assert policy.raised_priority(priority, levels) == expected
+
+
+@pytest.mark.parametrize("role", ["COORDINATOR", "ADMIN"])
+def test_grouped_reports_follow_their_main_ticket(role):
+    member = ticket("IN_PROGRESS", assigned_to=uuid.uuid4(), parent=uuid.uuid4())
+    me = user(role)
+    assert policy.allowed_status_transitions(me, member) == set()
+    assert not policy.can_assign(me, member)
+    assert policy.can_assign(me, ticket("NEW"))
+
+
+def test_reporter_keeps_confirm_and_reopen_on_a_grouped_report():
+    me = user("STUDENT")
+    member = ticket("RESOLVED", created_by=me.id, parent=uuid.uuid4(), resolved_at=datetime.now(timezone.utc))
+    assert policy.can_confirm_resolution(me, member)
+    assert policy.can_reopen(me, member)
+    assert policy.can_give_feedback(me, member)
+
+
+def test_only_coordinators_and_admins_review_suggestions_and_split_groups():
+    member = ticket("ASSIGNED", parent=uuid.uuid4())
+    for role in ("STUDENT", "FACULTY", "STAFF"):
+        assert not policy.can_review_suggestions(user(role))
+        assert not policy.can_split_group(user(role), member)
+    for role in ("COORDINATOR", "ADMIN"):
+        assert policy.can_review_suggestions(user(role))
+        assert policy.can_split_group(user(role), member)
+        assert not policy.can_split_group(user(role), ticket("ASSIGNED"))  # not grouped
+        assert not policy.can_split_group(user(role), ticket("CLOSED", parent=uuid.uuid4()))

@@ -41,6 +41,11 @@ class Ticket(Base, UUIDMixin, TimestampMixin):
         String(20), default=PriorityEnum.MEDIUM, index=True, nullable=False
     )
     ai_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    suggested_priority: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    ai_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ai_source: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # "gemini" or "keywords"
+    ai_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # pending, done or failed
+    ai_analyzed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     location: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
     status: Mapped[TicketStatusEnum] = mapped_column(
         String(30), default=TicketStatusEnum.NEW, index=True, nullable=False
@@ -55,7 +60,14 @@ class Ticket(Base, UUIDMixin, TimestampMixin):
     )
 
     # pgvector 384-dimensional dense semantic embedding
-    embedding: Mapped[Optional[List[float]]] = mapped_column(VectorType(384), nullable=True)
+    embedding: Mapped[Optional[List[float]]] = mapped_column(VectorType(384), nullable=True, deferred=True)
+
+    # Repeat reports of one problem: the older ticket is the main one; the others point at it.
+    parent_ticket_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tickets.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+    report_count: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    escalation_level: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
 
     # Timelines and SLA
     sla_deadline: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
@@ -72,6 +84,9 @@ class Ticket(Base, UUIDMixin, TimestampMixin):
         "Department", foreign_keys=[confirmed_department_id], back_populates="tickets_confirmed"
     )
     
+    parent: Mapped[Optional["Ticket"]] = relationship("Ticket", remote_side="Ticket.id", back_populates="members")
+    members: Mapped[List["Ticket"]] = relationship("Ticket", back_populates="parent")
+
     comments: Mapped[List["TicketComment"]] = relationship("TicketComment", back_populates="ticket", cascade="all, delete-orphan")
     attachments: Mapped[List["TicketAttachment"]] = relationship("TicketAttachment", back_populates="ticket", cascade="all, delete-orphan")
     status_history: Mapped[List["TicketStatusHistory"]] = relationship("TicketStatusHistory", back_populates="ticket", cascade="all, delete-orphan")
@@ -194,9 +209,14 @@ class TicketFeedback(Base, UUIDMixin, TimestampMixin):
 
 
 class TicketDuplicate(Base, UUIDMixin, TimestampMixin):
-    """Linkage between primary ticket and detected duplicates."""
+    """Link between an older (primary) ticket and a newer one that may be the same problem.
+
+    Unreviewed: ``is_verified`` false and no ``verified_by``. Confirmed or grouped: ``is_verified``.
+    Rejected by a coordinator: ``verified_by`` set and ``is_verified`` false.
+    """
 
     __tablename__ = "ticket_duplicates"
+    __table_args__ = (UniqueConstraint("primary_ticket_id", "duplicate_ticket_id", name="uq_ticket_duplicates_pair"),)
 
     primary_ticket_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tickets.id", ondelete="CASCADE"), index=True, nullable=False

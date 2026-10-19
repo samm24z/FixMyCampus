@@ -3,7 +3,7 @@
 import uuid
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -23,7 +23,7 @@ from app.schemas.ticket import (
     TicketWithdrawRequest,
 )
 from app.schemas.ticket_detail import DashboardSummary, TicketAssignmentRequest, TicketDetailRead
-from app.services import ticket_service
+from app.services import group_service, suggestion_service, ticket_service
 
 
 router = APIRouter(prefix="/tickets")
@@ -58,14 +58,18 @@ async def list_tickets(
     )
     tickets, total, total_pages = await ticket_service.list_tickets(db, current_user, filters, page, page_size)
     return PaginatedResponse[TicketRead](
-        items=[TicketRead.model_validate(ticket) for ticket in tickets],
+        items=[ticket_service.to_read(ticket, current_user) for ticket in tickets],
         total=total, page=page, page_size=page_size, total_pages=total_pages,
     )
 
 
 @router.post("", response_model=TicketDetailRead, status_code=status.HTTP_201_CREATED)
-async def create_ticket(payload: TicketCreate, db: DbSession, current_user: CurrentUser) -> TicketDetailRead:
-    return await ticket_service.create_ticket(db, current_user, payload)
+async def create_ticket(
+    payload: TicketCreate, background_tasks: BackgroundTasks, db: DbSession, current_user: CurrentUser
+) -> TicketDetailRead:
+    detail = await ticket_service.create_ticket(db, current_user, payload)
+    background_tasks.add_task(suggestion_service.analyze_ticket, detail.id)  # after the response: never delays the student
+    return detail
 
 
 @router.get("/{ticket_ref}", response_model=TicketDetailRead)
@@ -127,3 +131,32 @@ async def submit_feedback(
     ticket_ref: str, payload: FeedbackCreate, db: DbSession, current_user: CurrentUser
 ) -> TicketDetailRead:
     return await ticket_service.submit_feedback(db, current_user, ticket_ref, payload)
+
+
+@router.post("/{ticket_ref}/suggestions/accept", response_model=TicketDetailRead)
+async def accept_suggestions(ticket_ref: str, db: DbSession, current_user: CurrentUser) -> TicketDetailRead:
+    return await suggestion_service.accept_suggestions(db, current_user, ticket_ref)
+
+
+@router.post("/{ticket_ref}/suggestions/refresh", response_model=TicketDetailRead)
+async def refresh_suggestions(
+    ticket_ref: str, background_tasks: BackgroundTasks, db: DbSession, current_user: CurrentUser
+) -> TicketDetailRead:
+    detail = await suggestion_service.request_refresh(db, current_user, ticket_ref)
+    background_tasks.add_task(suggestion_service.analyze_ticket, detail.id)
+    return detail
+
+
+@router.post("/{ticket_ref}/duplicates/{other_ref}/group", response_model=TicketDetailRead)
+async def group_duplicate(ticket_ref: str, other_ref: str, db: DbSession, current_user: CurrentUser) -> TicketDetailRead:
+    return await group_service.group_duplicate(db, current_user, ticket_ref, other_ref)
+
+
+@router.post("/{ticket_ref}/duplicates/{other_ref}/dismiss", response_model=TicketDetailRead)
+async def dismiss_duplicate(ticket_ref: str, other_ref: str, db: DbSession, current_user: CurrentUser) -> TicketDetailRead:
+    return await group_service.dismiss_duplicate(db, current_user, ticket_ref, other_ref)
+
+
+@router.post("/{ticket_ref}/group/split", response_model=TicketDetailRead)
+async def split_from_group(ticket_ref: str, db: DbSession, current_user: CurrentUser) -> TicketDetailRead:
+    return await group_service.split_from_group(db, current_user, ticket_ref)

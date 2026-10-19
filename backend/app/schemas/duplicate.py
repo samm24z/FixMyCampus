@@ -24,3 +24,13 @@ class DuplicateRead(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class GroupMemberRead(BaseModel):
+    """A report grouped under a main ticket (shown to coordinators and admins)."""
+
+    ticket_id: uuid.UUID
+    ticket_number: str
+    title: str
+    status: str
+    created_at: datetime

@@ -29,6 +29,10 @@ os.environ["SUPABASE_URL"] = "https://test-project.supabase.co"
 from tests.conftest_constants import TEST_JWT_SECRET  # noqa: E402
 os.environ["SUPABASE_JWT_SECRET"] = TEST_JWT_SECRET
 os.environ["SUPABASE_SERVICE_ROLE_KEY"] = "test-service-role-key"
+# Tests never call Google or download the embedding model. Repeat-report checks are off unless
+# a test asks for them (the ``embeddings_on`` fixture), so unrelated tests can reuse the same ticket text.
+os.environ["GEMINI_API_KEY"] = ""
+os.environ["AI_EMBEDDINGS_ENABLED"] = "false"
 
 import asyncpg  # noqa: E402
 import pytest  # noqa: E402
@@ -44,10 +48,11 @@ from app.core.config import asyncpg_connect_args, normalise_async_url, settings 
 from app.core.database import engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import Department, User  # noqa: E402
+from app.services import suggestion_service  # noqa: E402
 from app.services.supabase_admin import get_supabase_admin  # noqa: E402
 from scripts.demo_users import DEMO_EMAILS, DEMO_USERS, demo_user_id  # noqa: E402
 from scripts.seed_database import seed_database  # noqa: E402
-from tests.helpers import FakeSupabaseAdmin, mint_token  # noqa: E402
+from tests.helpers import FakeEmbedder, FakeSupabaseAdmin, mint_token  # noqa: E402
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
@@ -113,6 +118,21 @@ def _run_migrations() -> None:
 @pytest.fixture(scope="session", autouse=True)
 def prepared_database() -> None:
     asyncio.run(_reset_and_seed())
+
+
+@pytest.fixture(autouse=True)
+def fake_ai(monkeypatch):
+    """Word-hash embeddings instead of the real model, and no Gemini unless a test installs one."""
+    suggestion_service.set_embedder(FakeEmbedder())
+    suggestion_service.set_gemini(None)
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "")
+    yield
+    suggestion_service.set_gemini(None)
+
+
+@pytest.fixture
+def embeddings_on(monkeypatch):
+    monkeypatch.setattr(settings, "AI_EMBEDDINGS_ENABLED", True)
 
 
 @pytest_asyncio.fixture(autouse=True)

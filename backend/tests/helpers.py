@@ -1,5 +1,8 @@
 """Test helpers: minting Supabase-style tokens and a fake Supabase admin client."""
 
+import hashlib
+import math
+import re
 import time
 import uuid
 from typing import Any, Optional
@@ -57,3 +60,14 @@ class FakeSupabaseAdmin:
 
     async def delete_user(self, user_id: uuid.UUID) -> None:
         self.deleted.append(user_id)
+
+
+class FakeEmbedder:
+    """Deterministic stand-in for the MiniLM model: one hashed slot per word, so shared words mean similar text."""
+
+    async def embed(self, text: str) -> list[float]:
+        vector = [0.0] * 384
+        for word in set(re.findall(r"[a-z0-9]+", text.lower())):
+            vector[int(hashlib.md5(word.encode()).hexdigest(), 16) % 384] += 1.0
+        norm = math.sqrt(sum(x * x for x in vector)) or 1.0
+        return [x / norm for x in vector]

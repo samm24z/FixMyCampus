@@ -14,6 +14,10 @@ COPY backend/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# Bake the embedding model into the image so the first request never downloads it.
+ENV FASTEMBED_CACHE_PATH=/opt/models
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding('sentence-transformers/all-MiniLM-L6-v2')"
+
 # Copy backend application and ai package
 COPY backend /app
 COPY ai /app/ai

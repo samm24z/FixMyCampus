@@ -26,6 +26,15 @@ export const statusLabel = (status: TicketStatus) => STATUS_LABELS[status] ?? st
 export const priorityLabel = (priority: TicketPriority) => PRIORITY_LABELS[priority] ?? priority;
 export const roleLabel = (role: Role) => ROLE_LABELS[role] ?? role;
 
+/** "Fairly sure (82%)": how sure the suggestion is, in plain words. */
+export function confidenceLabel(confidence: number) {
+  const words = confidence >= 0.9 ? 'Very sure' : confidence >= 0.7 ? 'Fairly sure' : confidence >= 0.5 ? 'Not fully sure' : 'Just a guess';
+  return `${words} (${Math.round(confidence * 100)}%)`;
+}
+
+export const similarityLabel = (score: number) => `${Math.round(score * 100)}% similar`;
+export const reportsLabel = (count: number) => `Reported by ${count} people`;
+
 export function isDone(status: TicketStatus) {
   return status === 'RESOLVED' || status === 'CLOSED';
 }

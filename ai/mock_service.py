@@ -7,6 +7,7 @@ from ai.interfaces import (
     BasePriorityService,
     BaseRAGService,
 )
+from ai.keyword_service import match_category, match_priority
 from ai.schemas import (
     CategoryPrediction,
     DuplicateCandidate,
@@ -16,41 +17,25 @@ from ai.schemas import (
 )
 
 
+_DEPARTMENTS = {
+    "IT / Network": "Information Technology",
+    "Electrical": "Electrical Maintenance",
+    "Water / Plumbing": "Sanitation & Plumbing",
+}
+
+
 class MockClassifierService(BaseClassifierService):
-    """Mock implementation of complaint classification."""
+    """Mock implementation of complaint classification (uses the keyword rules)."""
 
     async def classify(self, title: str, description: str) -> CategoryPrediction:
-        full_text = f"{title} {description}".lower()
-        if any(w in full_text for w in ["wifi", "internet", "network", "router", "login"]):
-            return CategoryPrediction(
-                suggested_category="IT / Network",
-                category_confidence=0.92,
-                suggested_department="Information Technology",
-                department_confidence=0.90,
-                confidence_warning=False,
-            )
-        elif any(w in full_text for w in ["light", "power", "fan", "spark", "switch", "wire"]):
-            return CategoryPrediction(
-                suggested_category="Electrical",
-                category_confidence=0.88,
-                suggested_department="Electrical Maintenance",
-                department_confidence=0.87,
-                confidence_warning=False,
-            )
-        elif any(w in full_text for w in ["leak", "tap", "pipe", "toilet", "washroom", "water"]):
-            return CategoryPrediction(
-                suggested_category="Water / Plumbing",
-                category_confidence=0.89,
-                suggested_department="Sanitation & Plumbing",
-                department_confidence=0.86,
-                confidence_warning=False,
-            )
+        category, words = match_category(f"{title} {description}")
+        known = bool(words)
         return CategoryPrediction(
-            suggested_category="Other",
-            category_confidence=0.55,
-            suggested_department="General Administration",
-            department_confidence=0.50,
-            confidence_warning=True,
+            suggested_category=category,
+            category_confidence=0.9 if known else 0.55,
+            suggested_department=_DEPARTMENTS.get(category, "General Administration"),
+            department_confidence=0.88 if known else 0.5,
+            confidence_warning=not known,
         )
 
 
@@ -67,32 +52,27 @@ class MockDeduplicationService(BaseDeduplicationService):
         return []
 
 
+_PRIORITY_SCORES = {
+    "CRITICAL": (0.95, "Immediate safety hazard detected", 4),
+    "HIGH": (0.85, "High-impact academic disruption", 24),
+    "MEDIUM": (0.75, "Standard maintenance issue", 72),
+    "LOW": (0.7, "Minor or cosmetic issue", 168),
+}
+
+
 class MockPriorityService(BasePriorityService):
-    """Mock implementation of priority calculation."""
+    """Mock implementation of priority calculation (uses the keyword rules)."""
 
     async def recommend_priority(
         self, title: str, description: str, category: Optional[str] = None
     ) -> PriorityRecommendation:
-        full_text = f"{title} {description}".lower()
-        if any(w in full_text for w in ["emergency", "fire", "spark", "hazard", "flood"]):
-            return PriorityRecommendation(
-                suggested_priority="CRITICAL",
-                priority_confidence=0.95,
-                urgency_signals=["Immediate safety hazard detected"],
-                recommended_sla_hours=4,
-            )
-        elif any(w in full_text for w in ["urgent", "exam", "blackout", "broken"]):
-            return PriorityRecommendation(
-                suggested_priority="HIGH",
-                priority_confidence=0.85,
-                urgency_signals=["High-impact academic disruption"],
-                recommended_sla_hours=24,
-            )
+        priority, _ = match_priority(f"{title} {description}")
+        confidence, signal, hours = _PRIORITY_SCORES[priority]
         return PriorityRecommendation(
-            suggested_priority="MEDIUM",
-            priority_confidence=0.75,
-            urgency_signals=["Standard maintenance issue"],
-            recommended_sla_hours=72,
+            suggested_priority=priority,
+            priority_confidence=confidence,
+            urgency_signals=[signal],
+            recommended_sla_hours=hours,
         )
 
 

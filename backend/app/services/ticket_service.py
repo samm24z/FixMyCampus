@@ -25,10 +25,19 @@ from app.core.exceptions import (
 from app.models.department import Department
 from app.models.enums import AuditActionEnum, RoleEnum, TicketStatusEnum
 from app.models.sla import SLARule
-from app.models.ticket import Ticket, TicketAssignment, TicketComment, TicketFeedback, TicketStatusHistory
+from app.models.ticket import (
+    Ticket,
+    TicketAssignment,
+    TicketComment,
+    TicketDuplicate,
+    TicketFeedback,
+    TicketStatusHistory,
+)
 from app.models.user import User
+from app.schemas.ai import DuplicateCandidateSummary, TicketSuggestions
 from app.schemas.assignment import AssignmentRead
 from app.schemas.comment import CommentCreate, CommentRead
+from app.schemas.duplicate import GroupMemberRead
 from app.schemas.feedback import FeedbackCreate, FeedbackRead
 from app.schemas.status_history import StatusHistoryRead
 from app.schemas.ticket import (
@@ -46,6 +55,7 @@ from app.schemas.ticket_detail import (
     TicketDetailRead,
     TicketPermissions,
 )
+from app.services import group_service
 from app.services.audit_service import record_audit
 
 S = TicketStatusEnum
@@ -67,6 +77,11 @@ def _detail_query():
         selectinload(Ticket.creator),
         selectinload(Ticket.assignee),
         selectinload(Ticket.confirmed_department),
+        selectinload(Ticket.suggested_department),
+        selectinload(Ticket.parent),
+        selectinload(Ticket.members),
+        selectinload(Ticket.duplicates_as_duplicate).selectinload(TicketDuplicate.primary_ticket),
+        selectinload(Ticket.duplicates_as_primary).selectinload(TicketDuplicate.duplicate_ticket),
         selectinload(Ticket.comments).selectinload(TicketComment.user),
         selectinload(Ticket.status_history),
         selectinload(Ticket.assignments),
@@ -150,14 +165,43 @@ async def dashboard_summary(db: AsyncSession, user: User) -> DashboardSummary:
         open_tickets=total - done,
         resolved_tickets=done,
         by_status=by_status,
-        recent_tickets=[TicketRead.model_validate(ticket) for ticket in recent.all()],
+        recent_tickets=[to_read(ticket, user) for ticket in recent.all()],
     )
 
 
 # ------------------------------------------------------------ presentation
 
+def to_read(ticket: Ticket, user: User) -> TicketRead:
+    """The ticket as ``user`` may see it: suggestions are for coordinators and admins only."""
+    read = TicketRead.model_validate(ticket)
+    if policy.can_review_suggestions(user):
+        return read
+    return read.model_copy(update={"suggested_category": None, "suggested_department_id": None, "ai_confidence": None})
+
+
+def _possible_duplicates(ticket: Ticket) -> list[DuplicateCandidateSummary]:
+    """Open reports that may be the same problem and nobody has decided on yet."""
+    own_group = ticket.parent_ticket_id or ticket.id
+    found = []
+    for link in [*ticket.duplicates_as_duplicate, *ticket.duplicates_as_primary]:
+        if group_service.is_reviewed(link):
+            continue
+        other = link.primary_ticket if link.duplicate_ticket_id == ticket.id else link.duplicate_ticket
+        if other.status in policy.DONE_STATUSES or (other.parent_ticket_id or other.id) == own_group:
+            continue
+        found.append(DuplicateCandidateSummary(
+            ticket_id=other.id, ticket_number=other.ticket_number, title=other.title,
+            similarity_score=round(link.similarity_score, 3), status=other.status,
+        ))
+    return sorted(found, key=lambda item: -item.similarity_score)
+
+
 def build_detail(ticket: Ticket, user: User) -> TicketDetailRead:
     show_internal = policy.can_see_internal_notes(user)
+    reviewer = policy.can_review_suggestions(user)
+    base = to_read(ticket, user).model_dump()
+    if reviewer and ticket.parent:
+        base["parent_ticket_number"] = ticket.parent.ticket_number
     comments = [
         CommentRead.model_validate(comment).model_copy(
             update={"author_name": comment.user.full_name, "author_role": comment.user.role}
@@ -166,7 +210,7 @@ def build_detail(ticket: Ticket, user: User) -> TicketDetailRead:
         if show_internal or not comment.is_internal
     ]
     return TicketDetailRead(
-        **TicketRead.model_validate(ticket).model_dump(),
+        **base,
         created_by_name=ticket.creator.full_name,
         assigned_to_name=ticket.assignee.full_name if ticket.assignee else None,
         department_name=ticket.confirmed_department.name if ticket.confirmed_department else None,
@@ -184,10 +228,24 @@ def build_detail(ticket: Ticket, user: User) -> TicketDetailRead:
             can_confirm=policy.can_confirm_resolution(user, ticket),
             can_withdraw=policy.can_withdraw(user, ticket),
             can_give_feedback=policy.can_give_feedback(user, ticket),
+            can_review_suggestions=reviewer,
+            can_split_group=policy.can_split_group(user, ticket),
             statuses_requiring_remarks=[
                 status for status in S if policy.requires_remarks(ticket.status, status.value)
             ],
         ),
+        suggestions=TicketSuggestions(
+            status=ticket.ai_status, category=ticket.suggested_category, priority=ticket.suggested_priority,
+            department_id=ticket.suggested_department_id,
+            department_name=ticket.suggested_department.name if ticket.suggested_department else None,
+            confidence=ticket.ai_confidence, reason=ticket.ai_reason, source=ticket.ai_source,
+            analyzed_at=ticket.ai_analyzed_at,
+        ) if reviewer and ticket.ai_status else None,
+        duplicates=_possible_duplicates(ticket) if reviewer else [],
+        group_members=[
+            GroupMemberRead(ticket_id=m.id, ticket_number=m.ticket_number, title=m.title, status=m.status, created_at=m.created_at)
+            for m in sorted(ticket.members, key=lambda item: item.created_at)
+        ] if reviewer else [],
     )
 
 
@@ -236,6 +294,7 @@ async def create_ticket(db: AsyncSession, user: User, payload: TicketCreate) -> 
         priority=payload.priority.value,
         location=payload.location,
         status=S.NEW.value,
+        ai_status="pending" if settings.AI_SUGGESTIONS_ENABLED else None,
         created_by=user.id,
         sla_deadline=await _sla_deadline(db, payload.category, payload.priority.value, now),
     )
@@ -254,6 +313,8 @@ async def change_status(db: AsyncSession, user: User, ticket_ref: str, payload: 
     ticket = await get_ticket_for_user(db, user, ticket_ref, for_update=True)
     if not policy.can_change_status(user, ticket):
         raise ForbiddenException("You can't change the status of this ticket")
+    if policy.is_group_member(ticket):
+        raise group_service.grouped_error(ticket)
     old, new = ticket.status, payload.status.value
     if new == old:
         raise ConflictException(f"This ticket is already {_label(old)}")
@@ -267,6 +328,7 @@ async def change_status(db: AsyncSession, user: User, ticket_ref: str, payload: 
     if new == S.RESOLVED.value:
         ticket.resolved_at = _now()
     _record_status(db, ticket, user, old, new, payload.remarks)
+    await group_service.propagate_status(db, ticket, new, payload.remarks)
     await db.commit()
     return await _detail_after_commit(db, user, ticket.id)
 
@@ -275,6 +337,8 @@ async def assign_ticket(db: AsyncSession, user: User, ticket_ref: str, payload: 
     ticket = await get_ticket_for_user(db, user, ticket_ref, for_update=True)
     if not policy.can_triage(user):
         raise ForbiddenException("Only coordinators and admins can assign tickets")
+    if policy.is_group_member(ticket):
+        raise group_service.grouped_error(ticket)
     if ticket.status not in policy.ASSIGNABLE_STATUSES:
         raise ConflictException(f"A ticket that is {_label(ticket.status)} can't be assigned")
     assignee = await db.scalar(select(User).where(
@@ -295,6 +359,7 @@ async def assign_ticket(db: AsyncSession, user: User, ticket_ref: str, payload: 
     if old_status in policy.PROMOTE_TO_ASSIGNED_STATUSES:
         ticket.status = S.ASSIGNED.value
         _record_status(db, ticket, user, old_status, ticket.status)
+        await group_service.propagate_status(db, ticket, ticket.status)
     db.add(TicketAssignment(
         ticket_id=ticket.id, assigned_by=user.id, assigned_to=assignee.id,
         department_id=department_id, notes=payload.notes,
@@ -344,6 +409,15 @@ async def update_triage(db: AsyncSession, user: User, ticket_ref: str, payload: 
             db, user=user, action=AuditActionEnum.UPDATE, entity_type="ticket", entity_id=ticket.id,
             old_values=old, new_values=new,
         )
+    if ("priority" in new or "sla_deadline" in new) and ticket.report_count > 1:
+        await group_service.sync_member_priority(db, ticket)
+    suggested = {"category": ticket.suggested_category, "priority": ticket.suggested_priority}
+    overridden = {key: suggested[key] for key in ("category", "priority") if key in new and suggested[key] and new[key] != suggested[key]}
+    if overridden:  # a person chose something other than what the system suggested
+        record_audit(
+            db, user=user, action=AuditActionEnum.AI_OVERRIDE, entity_type="ticket", entity_id=ticket.id,
+            old_values=overridden, new_values={key: new[key] for key in overridden},
+        )
     await db.commit()
     return await _detail_after_commit(db, user, ticket.id)
 
@@ -365,11 +439,14 @@ async def reopen_ticket(db: AsyncSession, user: User, ticket_ref: str, payload: 
         raise ForbiddenException("Only the person who reported this ticket can reopen it")
     if ticket.status not in policy.REOPENABLE_STATUSES:
         raise ConflictException("Only resolved or closed tickets can be reopened")
+    if policy.is_group_member(ticket):
+        await group_service.detach(db, ticket, user)  # not fixed for this person: it goes back to a coordinator on its own
     old = ticket.status
     ticket.status = S.REOPENED.value
     ticket.reopened_at = _now()
     ticket.resolved_at = None
     _record_status(db, ticket, user, old, ticket.status, payload.reason)
+    await group_service.propagate_status(db, ticket, ticket.status)
     await db.commit()
     return await _detail_after_commit(db, user, ticket.id)
 
@@ -393,6 +470,10 @@ async def withdraw_ticket(db: AsyncSession, user: User, ticket_ref: str, payload
         raise ForbiddenException("Only the person who reported this ticket can cancel it")
     if not policy.can_withdraw(user, ticket):
         raise ConflictException("A ticket can only be cancelled before it is assigned to someone")
+    if policy.is_group_member(ticket):
+        await group_service.detach(db, ticket, user)
+    else:
+        await group_service.promote_new_main(db, ticket, user)
     old = ticket.status
     ticket.status = S.CLOSED.value
     reason = payload.reason.strip() if payload.reason else ""
@@ -430,9 +511,14 @@ async def auto_close_resolved_tickets(db: AsyncSession, now: Optional[datetime] 
         .where(Ticket.status == S.RESOLVED.value, Ticket.resolved_at < cutoff)
         .with_for_update(skip_locked=True)
     )).all()
+    note = f"Closed automatically: no reply from the reporter within {days} days"
+    closed = 0
     for ticket in tickets:
+        if ticket.status != S.RESOLVED.value:
+            continue  # already closed along with its main ticket
         ticket.status = S.CLOSED.value
-        _record_status(db, ticket, None, S.RESOLVED.value, S.CLOSED.value,
-                       f"Closed automatically: no reply from the reporter within {days} days")
+        _record_status(db, ticket, None, S.RESOLVED.value, S.CLOSED.value, note)
+        await group_service.propagate_status(db, ticket, S.CLOSED.value, note)
+        closed += 1
     await db.commit()
-    return len(tickets)
+    return closed

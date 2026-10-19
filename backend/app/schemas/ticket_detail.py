@@ -6,8 +6,10 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel
 
 from app.models.enums import TicketStatusEnum
+from app.schemas.ai import DuplicateCandidateSummary, TicketSuggestions
 from app.schemas.assignment import AssignmentRead
 from app.schemas.comment import CommentRead
+from app.schemas.duplicate import GroupMemberRead
 from app.schemas.feedback import FeedbackRead
 from app.schemas.status_history import StatusHistoryRead
 from app.schemas.ticket import TicketRead
@@ -28,6 +30,8 @@ class TicketPermissions(BaseModel):
     can_confirm: bool = False
     can_withdraw: bool = False
     can_give_feedback: bool = False
+    can_review_suggestions: bool = False
+    can_split_group: bool = False
     statuses_requiring_remarks: List[TicketStatusEnum] = []
 
 
@@ -40,6 +44,10 @@ class TicketDetailRead(TicketRead):
     assignments: List[AssignmentRead] = []
     feedback: Optional[FeedbackRead] = None
     permissions: TicketPermissions = TicketPermissions()
+    # Coordinators and admins only; empty for everyone else.
+    suggestions: Optional[TicketSuggestions] = None
+    duplicates: List[DuplicateCandidateSummary] = []
+    group_members: List[GroupMemberRead] = []
 
 
 class DashboardSummary(BaseModel):

@@ -7,7 +7,25 @@ from ai.schemas import (
     DuplicateCandidate,
     PriorityRecommendation,
     RAGQueryResponse,
+    TicketSuggestion,
 )
+
+
+class BaseSuggestionService(ABC):
+    """Interface for suggesting a category and priority for a new report."""
+
+    @abstractmethod
+    async def suggest(self, title: str, description: str, location: str) -> TicketSuggestion:
+        """Suggest a category and priority. May raise; callers fall back to keywords."""
+        pass
+
+
+class BaseEmbeddingService(ABC):
+    """Interface for turning text into a normalised 384-number vector."""
+
+    @abstractmethod
+    async def embed(self, text: str) -> List[float]:
+        pass
 
 
 class BaseClassifierService(ABC):

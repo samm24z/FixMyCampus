@@ -1,6 +1,7 @@
 """AI Service schemas for backend endpoints."""
 
 import uuid
+from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from app.models.enums import PriorityEnum
@@ -30,3 +31,17 @@ class TriageAnalysisResponse(BaseModel):
     recommended_sla_hours: int
     duplicate_candidates: List[DuplicateCandidateSummary] = Field(default_factory=list)
     confidence_warning: bool = False
+
+
+class TicketSuggestions(BaseModel):
+    """What the system suggests for a ticket. Coordinators and admins only."""
+
+    status: str  # pending, done or failed
+    category: Optional[str] = None
+    priority: Optional[PriorityEnum] = None
+    department_id: Optional[uuid.UUID] = None
+    department_name: Optional[str] = None
+    confidence: Optional[float] = None
+    reason: Optional[str] = None
+    source: Optional[str] = None  # "gemini" or "keywords"
+    analyzed_at: Optional[datetime] = None

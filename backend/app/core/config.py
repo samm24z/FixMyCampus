@@ -125,10 +125,17 @@ class Settings(BaseSettings):
         return v
 
     # AI Configuration
+    # Gemini (free tier) suggests a category and priority. Empty key = keyword rules only.
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-flash-lite-latest"
+    GEMINI_TIMEOUT_SECONDS: float = 8.0
+    AI_SUGGESTIONS_ENABLED: bool = True
+    AI_EMBEDDINGS_ENABLED: bool = True
     AI_EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
-    AI_CLASSIFIER_MODEL: str = "distilbert-base-uncased"
-    AI_SIMILARITY_THRESHOLD: float = 0.82
-    OPENAI_API_KEY: str = ""
+    # Reports at least this similar (0-1) are listed for a coordinator to confirm; at least
+    # AI_AUTO_GROUP_THRESHOLD similar are grouped automatically.
+    AI_SIMILARITY_THRESHOLD: float = 0.75
+    AI_AUTO_GROUP_THRESHOLD: float = 0.90
 
     @property
     def allowed_email_domains(self) -> list[str]:
