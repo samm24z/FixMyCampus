@@ -10,6 +10,7 @@ import { TicketDetailPage } from '@/pages/TicketDetailPage';
 import { AdminPage } from '@/pages/AdminPage';
 import { StaffPage } from '@/pages/StaffPage';
 import { AssistantPage } from '@/pages/AssistantPage';
+import { CampusGuidePage } from '@/pages/CampusGuidePage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { CreateComplaintPage } from '@/pages/CreateComplaintPage';
 import { ProtectedRoute } from '@/lib/auth';
@@ -30,6 +31,7 @@ export const router = createBrowserRouter([
       { path: 'admin', element: <ProtectedRoute roles={['ADMIN']}><AdminPage /></ProtectedRoute> },
       { path: 'staff', element: <ProtectedRoute roles={['STAFF', 'COORDINATOR', 'ADMIN']}><StaffPage /></ProtectedRoute> },
       { path: 'assistant', element: <ProtectedRoute><AssistantPage /></ProtectedRoute> },
+      { path: 'campus-guide', element: <ProtectedRoute><CampusGuidePage /></ProtectedRoute> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },

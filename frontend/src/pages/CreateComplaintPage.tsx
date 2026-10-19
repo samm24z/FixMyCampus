@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, TicketPlus } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { LocationPicker } from '@/components/LocationPicker';
 import { CATEGORY_OPTIONS, getApiError, ticketsApi, type TicketPriority } from '@/lib/api';
 import { PRIORITIES, priorityLabel } from '@/lib/tickets';
 
@@ -65,10 +66,7 @@ export const CreateComplaintPage: React.FC = () => {
                 </select>
               </div>
             </div>
-            <div className="space-y-2">
-              <label htmlFor="location" className="text-sm font-medium">Location</label>
-              <input id="location" required minLength={2} value={form.location} onChange={(event) => updateField('location', event.target.value)} className="w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="Building and room, e.g. B Block, Room 204" />
-            </div>
+            <LocationPicker onChange={(location) => updateField('location', location)} />
             <Button type="submit" className="gap-2" disabled={isSubmitting}><Send className="h-4 w-4" /> {isSubmitting ? 'Sending...' : 'Send Report'}</Button>
           </form>
         </CardContent>

@@ -3,6 +3,7 @@
 import pytest
 from sqlalchemy import func, select
 
+from app.core import campus
 from app.core.database import AsyncSessionLocal
 from app.models.knowledge import KnowledgeChunk, KnowledgeDocument
 from app.services import knowledge_service
@@ -134,3 +135,28 @@ def test_department_heads_are_listed_from_the_contact_page_and_faculty_tables():
     assert "Head of Department (HOD) of Electronics and Communication Engineering" in ece
     assert "Prof.Namasivvaya" in ece and "Er. Nuli Namassivaya" in ece and "9866692214" in ece and "hod_ece@mvsrec.edu.in" in ece
     assert "is Dr. A V Krishna Prasad." in entries["hod-it"]["text"]
+
+
+def test_campus_guide_has_an_overview_and_an_entry_per_place(campus_guide_on):
+    rows = knowledge_service.campus_guide_rows()
+    assert len(rows) == len(campus.PLACES) + 1
+    assert {r["kind"] for r in rows} == {"html"} and {r["section"] for r in rows} == {"Campus guide"}
+    assert all(r["url"].startswith("/campus-guide#") for r in rows)
+    entries = {row["url"].split("#")[1]: row["text"] for row in rows}
+    assert "exam branch" in entries["as2"] and "Principal's office" in entries["civil-block"]
+    assert "Information Technology (IT)" in entries["overview"] and "Indoor Sports Room" in entries["overview"]
+
+
+async def test_campus_questions_find_the_campus_guide(campus_guide_on):
+    await load([page()])
+    async with AsyncSessionLocal() as db:
+        for question, key, fact in [
+            ("Where is the exam branch?", "as2", "AS2"),
+            ("Where do IT students have classes?", "civil-block", "Civil Block"),
+            ("Where is the principal's office?", "civil-block", "Civil Block"),
+            ("Which block do first years study in?", "as-block", "First-year"),
+            ("Where is the indoor sports room?", "indoor-sports-room", "canteen"),
+        ]:
+            passages = await knowledge_service.search(db, question, 6)
+            assert any(p.url == f"/campus-guide#{key}" for p in passages), question
+            assert any(fact in p.text for p in passages), question

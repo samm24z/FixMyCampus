@@ -75,10 +75,10 @@ The command removes only validation tickets `TICK-2026-0001` and `TICK-2026-0002
 
 | Ticket | Status | Category |
 | --- | --- | --- |
-| `TICK-2026-0101` WiFi not working in C Block | `NEW` | IT / Network |
-| `TICK-2026-0102` Projector not working in C-204 | `IN_PROGRESS` | Classroom Equipment |
-| `TICK-2026-0103` Water leakage near laboratory | `RESOLVED` | Water / Plumbing |
-| `TICK-2026-0104` Classroom fan not working | `REOPENED` | Electrical |
+| `TICK-2026-0101` WiFi not working in ECE Block | `NEW` | IT / Network |
+| `TICK-2026-0102` Projector not working in Room 204 | `IN_PROGRESS` | Classroom Equipment |
+| `TICK-2026-0103` Washroom tap leaking | `RESOLVED` | Water / Plumbing |
+| `TICK-2026-0104` Exam hall AC not working | `REOPENED` | Electrical |
 
 The demo command is idempotent, changes no schema or application code, and leaves AI fields and embeddings empty. All records are synthetic development data.
 

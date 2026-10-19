@@ -192,5 +192,40 @@
       "https://mvsrec.edu.in/index.php?catid=114&id=840&option=com_content&view=article"
     ],
     "fact": "Placement"
+  },
+  {
+    "question": "Where is the exam branch?",
+    "urls": [
+      "/campus-guide"
+    ],
+    "fact": "AS2"
+  },
+  {
+    "question": "Where do IT students have classes?",
+    "urls": [
+      "/campus-guide"
+    ],
+    "fact": "Civil Block"
+  },
+  {
+    "question": "Where is the principal's office?",
+    "urls": [
+      "/campus-guide"
+    ],
+    "fact": "Civil Block"
+  },
+  {
+    "question": "Which block do first years study in?",
+    "urls": [
+      "/campus-guide"
+    ],
+    "fact": "First-year"
+  },
+  {
+    "question": "Where is the indoor sports room?",
+    "urls": [
+      "/campus-guide"
+    ],
+    "fact": "canteen"
   }
 ]

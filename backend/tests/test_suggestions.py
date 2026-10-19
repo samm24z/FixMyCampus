@@ -19,7 +19,7 @@ SPARKS = {
     "title": "Sparks coming from the switchboard",
     "description": "Sparks and a burning smell near the main switchboard in the corridor.",
     "category": "Other",
-    "location": "Block B corridor",
+    "location": "Civil Block, corridor",
     "priority": "LOW",
 }
 

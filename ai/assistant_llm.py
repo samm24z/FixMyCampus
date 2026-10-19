@@ -38,7 +38,9 @@ INSTRUCTIONS = (
     "yourself, so never say you did: say you have prepared it and they can check it and click to send or confirm. "
     "Give at most 3, only when clearly useful:\n"
     "   report_problem (title, description, category, location, priority): the person describes something broken or unsafe on campus. "
-    "Fill location only if they said where.\n"
+    "Always fill location when they name a place: start with the name of a place from CAMPUS PLACES when one matches "
+    "(for example 'CSE Block, Room 204'), otherwise write the place as they said it; leave it empty only when they named no place. "
+    "Choose the best category; use Other only when no other category fits (a fan or light is Electrical).\n"
     "   confirm_fixed, reopen_ticket, cancel_ticket (ticket_number): only for a ticket in YOUR TICKETS whose can-list allows it.\n"
     "   add_comment (ticket_number, text): only when the person asked to add a note to one of YOUR TICKETS.\n"
     "   contact (label, email and/or phone): copied from SOURCES.\n"
@@ -79,6 +81,11 @@ RESPONSE_SCHEMA = {
     "required": ["answer", "cited", "status", "actions"],
     "propertyOrdering": ["answer", "cited", "status", "actions"],
 }
+
+
+def instructions(places: Optional[List[str]] = None) -> str:
+    """The rules, followed by the campus places the model should use for locations."""
+    return INSTRUCTIONS + (f"\nCAMPUS PLACES: {'; '.join(places)}." if places else "")
 
 
 class AssistantError(Exception):
@@ -137,18 +144,20 @@ class GeminiAssistantService(BaseAssistantService):
         model: str = "gemini-flash-lite-latest",
         timeout: float = 12.0,
         transport: Optional[httpx.AsyncBaseTransport] = None,
+        places: Optional[List[str]] = None,
     ) -> None:
         self.api_key = api_key
         self.model = model
         self.timeout = timeout
         self._transport = transport
+        self.places = places or []
 
     def _body(self, prompt: str, with_schema: bool) -> dict[str, Any]:
         config: dict[str, Any] = {"responseMimeType": "application/json", "temperature": 0.2, "maxOutputTokens": 1500}
         if with_schema:
             config["responseSchema"] = RESPONSE_SCHEMA
         return {
-            "systemInstruction": {"parts": [{"text": INSTRUCTIONS}]},
+            "systemInstruction": {"parts": [{"text": instructions(self.places)}]},
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": config,
         }

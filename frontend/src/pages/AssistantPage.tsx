@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BotMessageSquare, ExternalLink, Mail, Phone, Send, TicketPlus } from 'lucide-react';
+import { BotMessageSquare, ExternalLink, Map as MapIcon, Mail, Phone, Send, TicketPlus } from 'lucide-react';
 import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { LocationPicker } from '@/components/LocationPicker';
 import { CATEGORY_OPTIONS, assistantApi, getApiError, ticketsApi, type AssistantAction, type TicketPriority } from '@/lib/api';
 import {
-  STARTER_QUESTIONS, historyForRequest, isWebLink, mailHref, runTicketAction, telHref,
+  STARTER_QUESTIONS, historyForRequest, isAppLink, isWebLink, mailHref, runTicketAction, telHref,
   ticketActionButton, ticketActionDone, ticketActionTitle, type ChatMessage, type TicketAction,
 } from '@/lib/assistant';
 import { PRIORITIES, priorityLabel } from '@/lib/tickets';
@@ -61,7 +62,7 @@ function ReportCard({ action }: { action: Extract<AssistantAction, { type: 'repo
           {PRIORITIES.map((priority) => <option key={priority} value={priority}>{priorityLabel(priority)}</option>)}
         </select>
       </div>
-      <input aria-label="Location" className={FIELD} placeholder="Building and room, e.g. B Block, Room 204" value={form.location} onChange={(event) => update('location', event.target.value)} />
+      <LocationPicker initial={action.location} onChange={(location) => update('location', location)} />
       <Button size="sm" className="gap-2" disabled={sending || !ready} onClick={send}>
         <Send className="h-4 w-4" /> {sending ? 'Sending...' : 'Send report'}
       </Button>
@@ -119,6 +120,13 @@ function ActionCard({ action }: { action: AssistantAction }) {
         </div>
       );
     case 'open_link':
+      if (isAppLink(action.url)) {
+        return (
+          <Link to={action.url} className={`${CARD} flex items-center gap-2 font-medium text-primary hover:underline`}>
+            <MapIcon className="h-4 w-4" /> {action.label}
+          </Link>
+        );
+      }
       return isWebLink(action.url) ? (
         <a href={action.url} target="_blank" rel="noreferrer" className={`${CARD} flex items-center gap-2 font-medium text-primary hover:underline`}>
           <ExternalLink className="h-4 w-4" /> {action.label}
@@ -141,11 +149,13 @@ function Bubble({ message }: { message: ChatMessage }) {
       </div>
       {reply && reply.sources.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {reply.sources.map((source) => (
-            <a key={source.n} href={source.url} target="_blank" rel="noreferrer" title={source.section} className="inline-flex max-w-[16rem] items-center gap-1 truncate rounded-full border bg-background px-2.5 py-0.5 text-xs text-primary hover:bg-muted">
-              <span className="font-semibold">{source.n}</span> <span className="truncate">{source.title}</span>
-            </a>
-          ))}
+          {reply.sources.map((source) => {
+            const chip = 'inline-flex max-w-[16rem] items-center gap-1 truncate rounded-full border bg-background px-2.5 py-0.5 text-xs text-primary hover:bg-muted';
+            const content = <><span className="font-semibold">{source.n}</span> <span className="truncate">{source.title}</span></>;
+            return isAppLink(source.url)
+              ? <Link key={source.n} to={source.url} title={source.section} className={chip}>{content}</Link>
+              : <a key={source.n} href={source.url} target="_blank" rel="noreferrer" title={source.section} className={chip}>{content}</a>;
+          })}
         </div>
       )}
       {reply?.actions.map((action, index) => <ActionCard key={index} action={action} />)}
@@ -183,11 +193,16 @@ export const AssistantPage: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Ask a Question</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Ask about the college, check your tickets, or describe a problem and I'll help you report it.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Ask a Question</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Ask about the college, check your tickets, or describe a problem and I'll help you report it.
+          </p>
+        </div>
+        <Link to="/campus-guide" className="inline-flex items-center gap-1.5 rounded-lg border bg-background px-3 py-1.5 text-sm font-medium text-primary hover:bg-muted">
+          <MapIcon className="h-4 w-4" /> Campus guide
+        </Link>
       </div>
 
       <Card className="flex flex-col h-[600px]">

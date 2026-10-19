@@ -67,6 +67,9 @@ export function runTicketAction(action: TicketAction): Promise<{ data: TicketDet
 export const telHref = (phone: string) => `tel:${phone.replace(/[^\d+]/g, '')}`;
 export const mailHref = (email: string) => `mailto:${email}`;
 
+/** A page inside this app (like the campus guide): shown as a router link, not opened in a new tab. */
+export const isAppLink = (url: string) => url.startsWith('/') && !url.startsWith('//');
+
 /** Only web links from the college site are opened; anything else is not shown as a link. */
 export function isWebLink(url: string) {
   try {

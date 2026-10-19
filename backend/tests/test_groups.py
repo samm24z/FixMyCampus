@@ -45,6 +45,18 @@ async def file_reports(client, login, who: list[str], payload=PROJECTOR) -> list
     return [await create_ticket(client, await login(name), **payload) for name in who]
 
 
+async def test_the_same_wording_in_a_different_block_is_left_for_a_coordinator(async_client, login):
+    cse = (await file_reports(async_client, login, ["student"], {**PROJECTOR, "location": "CSE Block, Room 204"}))[0]
+    ece = (await file_reports(async_client, login, ["student2"], {**PROJECTOR, "location": "ECE Block, Room 204"}))[0]
+    coordinator = await login("coordinator")
+    detail = await get(async_client, coordinator, ece["ticket_number"])
+    assert detail["parent_ticket_id"] is None and detail["report_count"] == 1
+    assert [c["ticket_number"] for c in detail["duplicates"]] == [cse["ticket_number"]]
+
+    same = (await file_reports(async_client, login, ["faculty"], {**PROJECTOR, "location": "CSE Block, Room 204"}))[0]
+    assert (await get(async_client, coordinator, same["ticket_number"]))["parent_ticket_id"] == cse["id"]
+
+
 async def test_a_near_identical_report_joins_the_main_ticket_automatically(async_client, login):
     main, repeat = await file_reports(async_client, login, ["student", "student2"])
     coordinator = await login("coordinator")

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { historyForRequest, isWebLink, mailHref, telHref, ticketActionButton, type ChatMessage } from './assistant';
+import { historyForRequest, isAppLink, isWebLink, mailHref, telHref, ticketActionButton, type ChatMessage } from './assistant';
 
 const message = (id: number, role: 'user' | 'assistant', text: string, failed = false): ChatMessage => ({ id, role, text, failed });
 
@@ -31,5 +31,14 @@ describe('card helpers', () => {
     expect(isWebLink('https://mvsrec.edu.in/index.php?id=684')).toBe(true);
     expect(isWebLink('javascript:alert(1)')).toBe(false);
     expect(isWebLink('not a url')).toBe(false);
+  });
+});
+
+describe('isAppLink', () => {
+  it('treats paths inside the app as app links, not web links', () => {
+    expect(isAppLink('/campus-guide#as2')).toBe(true);
+    expect(isWebLink('/campus-guide#as2')).toBe(false);
+    expect(isAppLink('https://mvsrec.edu.in/')).toBe(false);
+    expect(isAppLink('//evil.example/x')).toBe(false);
   });
 });

@@ -18,7 +18,7 @@ from ai.gemini_service import GeminiSuggestionService
 from ai.interfaces import BaseEmbeddingService, BaseSuggestionService
 from ai.keyword_service import KeywordSuggestionService
 from ai.schemas import TicketSuggestion
-from app.core import permissions as policy
+from app.core import campus, permissions as policy
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.core.exceptions import ConflictException, ForbiddenException
@@ -171,7 +171,9 @@ async def _group_similar(db: AsyncSession, ticket_id: UUID, vector: list[float])
         else:
             continue
         kept += 1
-        if best is None and older is other and similarity >= settings.AI_AUTO_GROUP_THRESHOLD:
+        # Same wording in a different place may be a different problem: those go to a coordinator.
+        if (best is None and older is other and similarity >= settings.AI_AUTO_GROUP_THRESHOLD
+                and campus.same_place(ticket.location, other.location)):
             best = (other, link, similarity)
     await db.flush()
     standalone = ticket.parent_ticket_id is None and ticket.report_count == 1

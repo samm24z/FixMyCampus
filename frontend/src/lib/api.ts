@@ -29,6 +29,13 @@ export interface Department {
   is_active: boolean;
 }
 
+export interface Place {
+  key: string;
+  name: string;
+  kind: 'block' | 'facility';
+  description: string;
+}
+
 export interface Ticket {
   id: string;
   ticket_number: string;
@@ -269,6 +276,10 @@ export const authApi = {
 
 export const departmentsApi = {
   list: () => api.get<Department[]>('/departments'),
+};
+
+export const campusApi = {
+  places: () => api.get<Place[]>('/campus/places'),
 };
 
 export const usersApi = {

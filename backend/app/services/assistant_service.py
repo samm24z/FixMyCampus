@@ -19,7 +19,7 @@ from ai.assistant_llm import GeminiAssistantService
 from ai.interfaces import BaseAssistantService
 from ai.keyword_service import match_category, match_priority
 from ai.schemas import AssistantReply
-from app.core import permissions as policy
+from app.core import campus, permissions as policy
 from app.core.config import settings
 from app.core.exceptions import AppException
 from app.models.enums import AuditActionEnum, PriorityEnum
@@ -51,7 +51,9 @@ _recent: dict[uuid.UUID, deque] = {}
 def get_llm() -> Optional[BaseAssistantService]:
     global _llm
     if _llm is None and settings.GEMINI_API_KEY:
-        _llm = GeminiAssistantService(settings.GEMINI_API_KEY, settings.GEMINI_MODEL, settings.ASSISTANT_TIMEOUT_SECONDS)
+        _llm = GeminiAssistantService(
+            settings.GEMINI_API_KEY, settings.GEMINI_MODEL, settings.ASSISTANT_TIMEOUT_SECONDS, places=[p.name for p in campus.PLACES]
+        )
     return _llm if settings.GEMINI_API_KEY else None
 
 
@@ -146,6 +148,26 @@ def _clean(value: object, limit: int) -> str:
     return " ".join(str(value or "").split())[:limit]
 
 
+_ROOM = re.compile(r"\broom\s*(?:no\.?\s*)?[a-z]?-?\d{1,4}[a-z]?\b|\b(?:ground|\d{1,2}(?:st|nd|rd|th)|first|second|third|fourth)\s+floor\b", re.I)
+
+
+def _location(proposed: object, message: str) -> str:
+    """The model's location, or one read from the message: a known place first, then any room or floor it names."""
+    location = _clean(proposed, 255)
+    place = campus.match_place(message)
+    if location:
+        return campus.compose_location(place.name, location)[:255] if place and campus.match_place(location) is None else location
+    detail = ", ".join(dict.fromkeys(m.group(0)[0].upper() + m.group(0)[1:] for m in _ROOM.finditer(message)))
+    return campus.compose_location(place.name if place else "", detail)[:255]
+
+
+def _category(proposed: object, *texts: str) -> str:
+    """The model's category; the keyword rules when it is missing, invalid or just Other; Other only if nothing matches."""
+    if proposed in CATEGORY_VALUES and proposed != "Other":
+        return str(proposed)
+    return match_category(" ".join(texts))[0]
+
+
 def validate_actions(
     user: User, proposals: list[dict], passages: list[knowledge_service.Passage], tickets: list[Ticket], message: str
 ) -> list:
@@ -159,13 +181,12 @@ def validate_actions(
         if kind == "report_problem":
             title = _clean(proposal.get("title"), 255) or _clean(message, 80)
             description = _clean(proposal.get("description"), 2000) or _clean(message, 2000)
-            category = proposal.get("category")
             priority = str(proposal.get("priority") or "").upper()
             if len(title) >= 5 and len(description) >= 10:
                 action = ReportProblemAction(
                     title=title, description=description,
-                    category=category if category in CATEGORY_VALUES else "Other",
-                    location=_clean(proposal.get("location"), 255),
+                    category=_category(proposal.get("category"), title, description, message),
+                    location=_location(proposal.get("location"), message),
                     priority=PriorityEnum(priority) if priority in PriorityEnum.__members__ else PriorityEnum.MEDIUM,
                 )
         elif kind in ("confirm_fixed", "reopen_ticket", "cancel_ticket", "add_comment"):
@@ -212,7 +233,8 @@ def _fallback_report(message: str) -> Optional[ReportProblemAction]:
     return ReportProblemAction(
         title=text[:80] if len(text) >= 5 else "Problem on campus",
         description=text if len(text) >= 10 else f"{text} (sent from the assistant)",
-        category=match_category(message)[0],
+        category=_category(None, message),
+        location=_location("", message),
         priority=PriorityEnum(match_priority(message)[0]),
     )
 

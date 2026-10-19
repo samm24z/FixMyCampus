@@ -144,7 +144,7 @@ async def test_report_problem_is_clamped_to_the_ticket_rules(async_client, login
         {"type": "report_problem", "title": "x", "description": "y", "category": "Other"},
     ]))
     actions = (await ask(async_client, await login("student"), "the fan in Room 204 is broken")).json()["actions"]
-    assert actions[0]["category"] == "Other" and actions[0]["priority"] == "MEDIUM" and actions[0]["location"] == "Room 204"
+    assert actions[0]["category"] == "Electrical" and actions[0]["priority"] == "MEDIUM" and actions[0]["location"] == "Room 204"
     assert len(actions) == 1  # the card whose title and description are too short to be a ticket is dropped
 
 
@@ -235,3 +235,55 @@ async def test_message_must_be_one_to_a_thousand_characters(async_client, login)
     student = await login("student")
     assert (await ask(async_client, student, "")).status_code == 422
     assert (await ask(async_client, student, "x" * 1001)).status_code == 422
+
+
+async def test_report_card_gets_the_place_and_category_the_message_names(async_client, login, monkeypatch):
+    await seed_knowledge()
+    use_llm(monkeypatch, ok(cited=[], actions=[
+        {"type": "report_problem", "title": "Broken ceiling fan", "description": "The ceiling fan is broken and noisy.", "category": "Other", "location": ""},
+        {"type": "report_problem", "title": "Projector not working", "description": "The projector shows no image.", "category": "", "location": "Room 204"},
+        {"type": "report_problem", "title": "Tap is leaking", "description": "The tap is leaking.", "category": "Sanitation", "location": "Library entrance"},
+    ]))
+    message = "The ceiling fan in Room 204 of the CSE Block is broken and making a loud noise"
+    cards = (await ask(async_client, await login("student"), message)).json()["actions"]
+    assert cards[0]["category"] == "Electrical" and cards[0]["location"] == "CSE Block, Room 204"
+    assert cards[1]["category"] == "Electrical" and cards[1]["location"] == "CSE Block, Room 204"  # the model's room, plus the place it left out
+    assert cards[2]["category"] == "Sanitation" and cards[2]["location"] == "Library entrance"  # already names a place
+
+
+async def test_made_up_places_keep_only_the_room_and_unmatched_text_stays_other(async_client, login, monkeypatch):
+    await seed_knowledge()
+    use_llm(monkeypatch, ok(cited=[], actions=[
+        {"type": "report_problem", "title": "Odd problem here", "description": "Something is wrong with it.", "category": "Other"},
+    ]))
+    card = (await ask(async_client, await login("student"), "Something is wrong in Room 204 of B Block")).json()["actions"][0]
+    assert (card["category"], card["location"]) == ("Other", "Room 204")
+
+
+async def test_fallback_report_card_also_gets_the_place(async_client, login):
+    await seed_knowledge()
+    card = (await ask(async_client, await login("student"), "The fan in the ECE Block is not working")).json()["actions"][0]
+    assert card["category"] == "Electrical" and card["location"] == "ECE Block"
+
+
+async def test_the_model_is_told_the_campus_places_and_may_link_to_the_campus_guide(async_client, login, monkeypatch, campus_guide_on):
+    async with AsyncSessionLocal() as db:
+        await knowledge_service.ingest(db, [FEES_PAGE], FakeEmbedder())
+    link = {"type": "open_link", "label": "Campus guide", "url": "/campus-guide#as2"}
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "test-key")
+    assistant_service.set_llm(None)
+    llm = assistant_service.get_llm()
+    assert "CSE Block" in llm.places and "AS2 (Exam Branch)" in llm.places
+    seen = []
+    llm._transport = httpx.MockTransport(lambda request: seen.append(request) or httpx.Response(200, json=gemini_reply(cited=[1], actions=[link])))
+    body = (await ask(async_client, await login("student"), "Where is the exam branch?")).json()
+    assert body["actions"] == [link]
+    assert "CAMPUS PLACES: AS&H Block (First-year block); AS1; AS2 (Exam Branch); CSE Block;" in json.loads(seen[0].content)["systemInstruction"]["parts"][0]["text"]
+
+
+def test_rooms_and_floors_are_read_from_the_message():
+    assert assistant_service._location("", "Water leak on the 2nd floor of the Civil Block, near Room 12B") == "Civil Block, 2nd floor, Room 12B"
+    assert assistant_service._location("", "ground floor washroom in the Mechanical Block") == "Mechanical Block, Ground floor"
+    assert assistant_service._location("", "the tap is leaking") == ""
+    assert assistant_service._location("near the stairs", "the door in the CSE Block is stuck") == "CSE Block, near the stairs"
+    assert assistant_service._location("Library", "the tap near the CSE Block is leaking") == "Library"

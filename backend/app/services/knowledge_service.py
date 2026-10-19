@@ -15,6 +15,7 @@ from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.interfaces import BaseEmbeddingService
+from app.core import campus
 from app.models.knowledge import KnowledgeChunk, KnowledgeDocument
 from app.services import suggestion_service
 
@@ -224,6 +225,29 @@ def department_head_rows(rows: list[dict]) -> list[dict]:
     return generated
 
 
+CAMPUS_GUIDE = "/campus-guide"  # an in-app page: the campus layout is not on the college website
+
+
+def _generated(url: str, title: str, section: str, text_body: str) -> dict:
+    return {
+        "url": url, "title": title, "kind": "html", "section": section, "text": text_body,
+        "fetched_at": None, "sha256": hashlib.sha256(text_body.encode()).hexdigest(),
+    }
+
+
+def campus_guide_rows() -> list[dict]:
+    """An overview plus one entry per block and facility, from app.core.campus; names and aliases make "where is ..." findable."""
+    overview = ["## Campus guide: blocks and facilities", "Where things are on the MVSR Engineering College campus, and which block each branch has its classes in."]
+    for kind, heading in ((campus.BLOCK, "Blocks"), (campus.FACILITY, "Other places")):
+        overview.append(f"## {heading}")
+        overview += [f"- {place.name}: {place.description}" for place in campus.PLACES if place.kind == kind]
+    generated = [_generated(f"{CAMPUS_GUIDE}#overview", "Campus guide: blocks and facilities", "Campus guide", "\n".join(overview))]
+    for place in campus.PLACES:
+        lines = [f"## {place.name}", place.description, f"Also called: {', '.join(place.aliases)}."]
+        generated.append(_generated(f"{CAMPUS_GUIDE}#{place.key}", f"Campus guide: {place.name}", "Campus guide", "\n".join(lines)))
+    return generated
+
+
 async def ingest(db: AsyncSession, rows: Iterable[dict], embedder: Optional[BaseEmbeddingService] = None) -> IngestStats:
     """Load crawled pages. Unchanged pages are skipped, changed ones get new passages, vanished ones go inactive."""
     embedder = embedder or suggestion_service.get_embedder()
@@ -233,6 +257,7 @@ async def ingest(db: AsyncSession, rows: Iterable[dict], embedder: Optional[Base
     seen_hashes: set[str] = set()
     rows = list(rows)
     rows += department_head_rows(rows)
+    rows += campus_guide_rows()
     for row in rows:
         url = row["url"]
         doc = existing.get(url)

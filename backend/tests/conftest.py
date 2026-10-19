@@ -48,7 +48,7 @@ from app.core.config import asyncpg_connect_args, normalise_async_url, settings 
 from app.core.database import engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import Department, User  # noqa: E402
-from app.services import assistant_service, suggestion_service  # noqa: E402
+from app.services import assistant_service, knowledge_service, suggestion_service  # noqa: E402
 from app.services.supabase_admin import get_supabase_admin  # noqa: E402
 from scripts.demo_users import DEMO_EMAILS, DEMO_USERS, demo_user_id  # noqa: E402
 from scripts.seed_database import seed_database  # noqa: E402
@@ -115,6 +115,9 @@ def _run_migrations() -> None:
     command.upgrade(config, "head")
 
 
+REAL_CAMPUS_GUIDE_ROWS = knowledge_service.campus_guide_rows
+
+
 @pytest.fixture(scope="session", autouse=True)
 def prepared_database() -> None:
     asyncio.run(_reset_and_seed())
@@ -128,9 +131,15 @@ def fake_ai(monkeypatch):
     assistant_service.set_llm(None)
     assistant_service.reset_rate_limits()
     monkeypatch.setattr(settings, "GEMINI_API_KEY", "")
+    monkeypatch.setattr(knowledge_service, "campus_guide_rows", lambda: [])  # keeps page counts in knowledge tests exact
     yield
     suggestion_service.set_gemini(None)
     assistant_service.set_llm(None)
+
+
+@pytest.fixture
+def campus_guide_on(monkeypatch):
+    monkeypatch.setattr(knowledge_service, "campus_guide_rows", REAL_CAMPUS_GUIDE_ROWS)
 
 
 @pytest.fixture

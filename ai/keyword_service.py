@@ -12,7 +12,7 @@ CATEGORY_KEYWORDS: dict[str, List[str]] = {
     "Sanitation": ["garbage", "dustbin", "trash", "waste", "dirty", "smell", "cleaning", "sweeping", "mosquito", "unclean"],
     "Water / Plumbing": ["leak", "leaking", "tap", "pipe", "toilet", "washroom", "water", "drain", "flush", "sink", "drinking"],
     "Classroom Equipment": ["projector", "board", "whiteboard", "blackboard", "bench", "desk", "chair", "mic", "microphone", "speaker", "podium"],
-    "Civil Maintenance": ["ceiling", "wall", "crack", "roof", "door", "window", "paint", "floor", "stairs", "gate", "glass"],
+    "Civil Maintenance": ["ceiling", "wall", "crack", "roof", "door", "window", "paint", "tile", "tiles", "flooring", "stairs", "gate", "glass"],
     "Academic Facilities": ["library", "lab", "laboratory", "exam", "seminar", "timetable", "books", "classroom"],
 }
 PRIORITY_KEYWORDS: List[Tuple[str, List[str]]] = [

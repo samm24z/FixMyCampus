@@ -15,10 +15,10 @@ from app.services import ticket_service
 DEMO_USER_PREFIXES = ["student", "student2", "faculty", "staff", "staff2", "coordinator", "admin"]
 
 NEW_TICKET = {
-    "title": "WiFi down in C Block",
-    "description": "Nobody in C Block can connect to the campus WiFi since morning.",
+    "title": "WiFi down in ECE Block",
+    "description": "Nobody in the ECE Block can connect to the campus WiFi since morning.",
     "category": "IT / Network",
-    "location": "C Block, first floor",
+    "location": "ECE Block, 1st floor",
     "priority": "HIGH",
 }
 
