@@ -5,15 +5,12 @@ from ai.interfaces import (
     BaseClassifierService,
     BaseDeduplicationService,
     BasePriorityService,
-    BaseRAGService,
 )
 from ai.keyword_service import match_category, match_priority
 from ai.schemas import (
     CategoryPrediction,
     DuplicateCandidate,
     PriorityRecommendation,
-    RAGQueryResponse,
-    SourceCitation,
 )
 
 
@@ -73,25 +70,4 @@ class MockPriorityService(BasePriorityService):
             priority_confidence=confidence,
             urgency_signals=[signal],
             recommended_sla_hours=hours,
-        )
-
-
-class MockRAGService(BaseRAGService):
-    """Mock implementation of RAG campus policy assistant."""
-
-    async def answer_policy_query(
-        self, question: str, history: Optional[List[dict]] = None
-    ) -> RAGQueryResponse:
-        return RAGQueryResponse(
-            answer="Based on the Campus Facilities Policy (Section 4.2), standard maintenance requests submitted by students are triaged within 24 hours.",
-            citations=[
-                SourceCitation(
-                    document_title="Campus Facilities Policy & Grievance Guidelines 2026",
-                    page_number=14,
-                    section_heading="4.2 Maintenance SLAs and Triage Workflow",
-                    snippet="All registered campus grievances undergo initial coordinator triage within 24 hours of submission.",
-                    similarity_score=0.91,
-                )
-            ],
-            is_grounded=True,
         )

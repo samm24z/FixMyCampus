@@ -48,7 +48,7 @@ from app.core.config import asyncpg_connect_args, normalise_async_url, settings 
 from app.core.database import engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import Department, User  # noqa: E402
-from app.services import suggestion_service  # noqa: E402
+from app.services import assistant_service, suggestion_service  # noqa: E402
 from app.services.supabase_admin import get_supabase_admin  # noqa: E402
 from scripts.demo_users import DEMO_EMAILS, DEMO_USERS, demo_user_id  # noqa: E402
 from scripts.seed_database import seed_database  # noqa: E402
@@ -125,9 +125,12 @@ def fake_ai(monkeypatch):
     """Word-hash embeddings instead of the real model, and no Gemini unless a test installs one."""
     suggestion_service.set_embedder(FakeEmbedder())
     suggestion_service.set_gemini(None)
+    assistant_service.set_llm(None)
+    assistant_service.reset_rate_limits()
     monkeypatch.setattr(settings, "GEMINI_API_KEY", "")
     yield
     suggestion_service.set_gemini(None)
+    assistant_service.set_llm(None)
 
 
 @pytest.fixture
@@ -142,6 +145,7 @@ async def clean_operational_data():
     async with engine.begin() as conn:
         await conn.execute(text("DELETE FROM audit_logs"))
         await conn.execute(text("DELETE FROM tickets"))
+        await conn.execute(text("DELETE FROM knowledge_documents"))
         await conn.execute(
             text("DELETE FROM users WHERE email <> ALL(:emails)").bindparams(emails=DEMO_EMAILS)
         )

@@ -1,0 +1,196 @@
+[
+  {
+    "question": "Who is the head of the CSE department?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=707&option=com_content&view=article",
+      "https://mvsrec.edu.in/index.php?id=684&option=com_content&view=article"
+    ],
+    "fact": "Akhil Khare"
+  },
+  {
+    "question": "What is the email of the CSE HOD?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=707&option=com_content&view=article",
+      "https://mvsrec.edu.in/index.php?id=684&option=com_content&view=article"
+    ],
+    "fact": "hod_cse"
+  },
+  {
+    "question": "Who is the head of the ECE department?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=695&option=com_content&view=article",
+      "https://mvsrec.edu.in/index.php?id=684&option=com_content&view=article"
+    ],
+    "fact": "Namas"
+  },
+  {
+    "question": "Who is the head of the mechanical engineering department?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=729&option=com_content&view=article",
+      "https://mvsrec.edu.in/index.php?id=684&option=com_content&view=article"
+    ],
+    "fact": "Subbaiah"
+  },
+  {
+    "question": "Who is the head of the civil engineering department?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=684&option=com_content&view=article"
+    ],
+    "fact": "Shiva Chandra"
+  },
+  {
+    "question": "What is the EAMCET code of the college?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=646&option=com_content&view=article"
+    ],
+    "fact": "MVSR"
+  },
+  {
+    "question": "How do I contact the exam branch?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=684&option=com_content&view=article",
+      "https://mvsrec.edu.in/index.php?id=141&option=com_content&view=article"
+    ],
+    "fact": "exambranch@mvsrec.edu.in"
+  },
+  {
+    "question": "Who is the transport in-charge and what is the phone number?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=684&option=com_content&view=article"
+    ],
+    "fact": "8885511585"
+  },
+  {
+    "question": "Who should I contact about scholarships?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=684&option=com_content&view=article",
+      "https://mvsrec.edu.in/index.php?id=1262&option=com_content&view=article"
+    ],
+    "fact": "9160123598"
+  },
+  {
+    "question": "What is the phone number of the principal's office?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=684&option=com_content&view=article"
+    ],
+    "fact": "9398930759"
+  },
+  {
+    "question": "How can I pay my tuition fees online?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=1112&option=com_content&view=article"
+    ],
+    "fact": "Tuition Fees"
+  },
+  {
+    "question": "How can faculty send a grievance by email?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=1133&option=com_content&view=article",
+      "https://mvsrec.edu.in/index.php?id=1342&option=com_content&view=article"
+    ],
+    "fact": "grievance@mvsrec.edu.in"
+  },
+  {
+    "question": "What does the anti-ragging committee do?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=662&option=com_content&view=article"
+    ],
+    "fact": "Anti Ragging Act"
+  },
+  {
+    "question": "What are the bus routes and timings?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=809&option=com_content&view=article"
+    ],
+    "fact": "Route No"
+  },
+  {
+    "question": "Who do I contact about the hostel?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=808&option=com_content&view=article"
+    ],
+    "fact": "9398930334"
+  },
+  {
+    "question": "What is the NAAC grade of the college?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=654&option=com_content&view=article"
+    ],
+    "fact": "B++"
+  },
+  {
+    "question": "Who is the principal of the college?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=139&option=com_content&view=article",
+      "https://mvsrec.edu.in/index.php?id=684&option=com_content&view=article"
+    ],
+    "fact": "Kameswara Rao"
+  },
+  {
+    "question": "Who is the Director of Examinations and Research?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=141&option=com_content&view=article",
+      "https://mvsrec.edu.in/index.php?id=684&option=com_content&view=article"
+    ],
+    "fact": "Vardhani"
+  },
+  {
+    "question": "What is the postal address of the college?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=684&option=com_content&view=article"
+    ],
+    "fact": "NADERGUL"
+  },
+  {
+    "question": "What is the email of the academic section?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=684&option=com_content&view=article"
+    ],
+    "fact": "academics@mvsrec.edu.in"
+  },
+  {
+    "question": "What are the eligibility requirements for B.E admission?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=1125&option=com_content&view=article"
+    ],
+    "fact": "EAMCET"
+  },
+  {
+    "question": "What is the college's vision and mission?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=652&option=com_content&view=article",
+      "https://mvsrec.edu.in/index.php?id=1292&layout=edit&option=com_content&view=article"
+    ],
+    "fact": "Vision"
+  },
+  {
+    "question": "Who is the head of the IT department?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=684&option=com_content&view=article"
+    ],
+    "fact": "Krishna Prasad"
+  },
+  {
+    "question": "What is the email of the ECE head of department?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=695&option=com_content&view=article",
+      "https://mvsrec.edu.in/index.php?id=684&option=com_content&view=article"
+    ],
+    "fact": "hod_ece"
+  },
+  {
+    "question": "Who is the head of the EEE department?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=684&option=com_content&view=article"
+    ],
+    "fact": "Rama Rao"
+  },
+  {
+    "question": "Is there a placement and career guidance cell?",
+    "urls": [
+      "https://mvsrec.edu.in/index.php?id=1401&layout=edit&option=com_content&view=article",
+      "https://mvsrec.edu.in/index.php?catid=114&id=840&option=com_content&view=article"
+    ],
+    "fact": "Placement"
+  }
+]

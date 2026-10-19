@@ -21,7 +21,7 @@ from app.schemas.analytics import (
     CategoryBreakdownItem, StatusBreakdownItem, SLAComplianceStats, AnalyticsSummary
 )
 from app.schemas.ai import TriageAnalysisRequest, TriageAnalysisResponse, DuplicateCandidateSummary
-from app.schemas.assistant import PolicyCitation, PolicyQueryRequest, PolicyQueryResponse
+from app.schemas.assistant import AssistantChatRequest, AssistantChatResponse
 from app.schemas.health import HealthResponse
 
 __all__ = [
@@ -83,8 +83,7 @@ __all__ = [
     "TriageAnalysisRequest",
     "TriageAnalysisResponse",
     "DuplicateCandidateSummary",
-    "PolicyCitation",
-    "PolicyQueryRequest",
-    "PolicyQueryResponse",
+    "AssistantChatRequest",
+    "AssistantChatResponse",
     "HealthResponse",
 ]

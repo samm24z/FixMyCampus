@@ -129,6 +129,9 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-flash-lite-latest"
     GEMINI_TIMEOUT_SECONDS: float = 8.0
+    # The chat assistant uses the same key and model; it gets a little longer to answer.
+    ASSISTANT_TIMEOUT_SECONDS: float = 12.0
+    ASSISTANT_MESSAGES_PER_MINUTE: int = 8
     AI_SUGGESTIONS_ENABLED: bool = True
     AI_EMBEDDINGS_ENABLED: bool = True
     AI_EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"

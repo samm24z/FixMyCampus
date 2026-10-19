@@ -168,6 +168,33 @@ export interface TicketListParams {
   page_size?: number;
 }
 
+export interface AssistantTurn {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+export interface AssistantSource {
+  n: number;
+  title: string;
+  url: string;
+  section: string;
+}
+
+/** Suggestions from the assistant. Nothing happens until the person clicks. */
+export type AssistantAction =
+  | { type: 'report_problem'; title: string; description: string; category: string; location: string; priority: TicketPriority }
+  | { type: 'confirm_fixed' | 'reopen_ticket' | 'cancel_ticket'; ticket_number: string; ticket_title: string }
+  | { type: 'add_comment'; ticket_number: string; ticket_title: string; text: string }
+  | { type: 'contact'; label: string; email: string | null; phone: string | null }
+  | { type: 'open_link'; label: string; url: string };
+
+export interface AssistantReply {
+  answer: string;
+  sources: AssistantSource[];
+  actions: AssistantAction[];
+  status: 'answered' | 'not_found' | 'fallback';
+}
+
 export const CATEGORY_OPTIONS = [
   'IT / Network',
   'Electrical',
@@ -284,6 +311,10 @@ export const ticketsApi = {
   sameProblem: (ref: string, otherRef: string) => api.post<TicketDetail>(`/tickets/${ref}/duplicates/${otherRef}/group`),
   notSameProblem: (ref: string, otherRef: string) => api.post<TicketDetail>(`/tickets/${ref}/duplicates/${otherRef}/dismiss`),
   splitFromGroup: (ref: string) => api.post<TicketDetail>(`/tickets/${ref}/group/split`),
+};
+
+export const assistantApi = {
+  chat: (message: string, history: AssistantTurn[]) => api.post<AssistantReply>('/assistant/chat', { message, history }),
 };
 
 /** Drop empty filter values so they are not sent as `?status=`. */

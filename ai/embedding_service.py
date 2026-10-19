@@ -26,10 +26,16 @@ class MiniLMEmbedder(BaseEmbeddingService):
                 self._model = TextEmbedding(model_name=self.model_name)
             return self._model
 
-    def _embed_sync(self, text: str) -> List[float]:
-        vector = [float(x) for x in next(iter(self._load().embed([text])))]
-        norm = math.sqrt(sum(x * x for x in vector)) or 1.0
-        return [x / norm for x in vector]
+    def _embed_sync(self, texts: List[str]) -> List[List[float]]:
+        vectors = []
+        for raw in self._load().embed(texts):
+            vector = [float(x) for x in raw]
+            norm = math.sqrt(sum(x * x for x in vector)) or 1.0
+            vectors.append([x / norm for x in vector])
+        return vectors
 
     async def embed(self, text: str) -> List[float]:
-        return await asyncio.to_thread(self._embed_sync, text)
+        return (await asyncio.to_thread(self._embed_sync, [text]))[0]
+
+    async def embed_many(self, texts: List[str]) -> List[List[float]]:
+        return await asyncio.to_thread(self._embed_sync, texts) if texts else []

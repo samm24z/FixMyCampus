@@ -3,10 +3,10 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
 from ai.schemas import (
+    AssistantReply,
     CategoryPrediction,
     DuplicateCandidate,
     PriorityRecommendation,
-    RAGQueryResponse,
     TicketSuggestion,
 )
 
@@ -26,6 +26,9 @@ class BaseEmbeddingService(ABC):
     @abstractmethod
     async def embed(self, text: str) -> List[float]:
         pass
+
+    async def embed_many(self, texts: List[str]) -> List[List[float]]:
+        return [await self.embed(text) for text in texts]
 
 
 class BaseClassifierService(ABC):
@@ -64,12 +67,12 @@ class BasePriorityService(ABC):
         pass
 
 
-class BaseRAGService(ABC):
-    """Interface for campus policy Q&A assistant with source citations."""
+class BaseAssistantService(ABC):
+    """Interface for the campus chat assistant: one call per message, answers only from the given sources."""
 
     @abstractmethod
-    async def answer_policy_query(
-        self, question: str, history: Optional[List[dict]] = None
-    ) -> RAGQueryResponse:
-        """Answer policy query with source document citations."""
+    async def reply(
+        self, message: str, sources: List[dict], tickets: List[dict], history: List[dict]
+    ) -> AssistantReply:
+        """May raise; callers fall back to showing the sources."""
         pass

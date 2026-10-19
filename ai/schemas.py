@@ -40,23 +40,9 @@ class PriorityRecommendation(BaseModel):
     recommended_sla_hours: int = Field(..., description="Suggested resolution SLA target in hours")
 
 
-class SourceCitation(BaseModel):
-    """Grounding citation for RAG policy answers."""
-    document_title: str = Field(..., description="Name of approved campus document")
-    page_number: Optional[int] = Field(None, description="Page number in document")
-    section_heading: Optional[str] = Field(None, description="Section or chapter name")
-    snippet: str = Field(..., description="Relevant text excerpt")
-    similarity_score: float = Field(..., ge=0.0, le=1.0)
-
-
-class RAGQueryRequest(BaseModel):
-    """Incoming user question to campus policy assistant."""
-    question: str = Field(..., min_length=3, max_length=1000)
-    conversation_history: List[dict] = Field(default_factory=list)
-
-
-class RAGQueryResponse(BaseModel):
-    """Grounded answer from campus policy assistant with citations."""
-    answer: str = Field(..., description="LLM generated answer grounded in approved docs")
-    citations: List[SourceCitation] = Field(default_factory=list)
-    is_grounded: bool = Field(True, description="False if answer fell back to generic guidance")
+class AssistantReply(BaseModel):
+    """What the model said, before the server checks it. Actions are only proposals."""
+    answer: str
+    cited: List[int] = Field(default_factory=list, description="Numbers of the sources used")
+    status: str = Field("answered", description="'answered' or 'not_found'")
+    actions: List[dict] = Field(default_factory=list)

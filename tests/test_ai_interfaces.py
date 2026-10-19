@@ -5,7 +5,6 @@ from ai.mock_service import (
     MockClassifierService,
     MockDeduplicationService,
     MockPriorityService,
-    MockRAGService,
 )
 
 
@@ -41,16 +40,6 @@ async def test_mock_priority_engine():
     )
     assert result.suggested_priority == "CRITICAL"
     assert result.recommended_sla_hours == 4
-
-
-@pytest.mark.asyncio
-async def test_mock_rag_service():
-    """Verify RAG service returns grounded answer with citation."""
-    rag_service = MockRAGService()
-    result = await rag_service.answer_policy_query("What is the resolution SLA for standard complaints?")
-    assert result.is_grounded is True
-    assert len(result.citations) > 0
-    assert result.citations[0].page_number == 14
 
 
 @pytest.mark.asyncio

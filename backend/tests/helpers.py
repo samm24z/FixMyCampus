@@ -71,3 +71,6 @@ class FakeEmbedder:
             vector[int(hashlib.md5(word.encode()).hexdigest(), 16) % 384] += 1.0
         norm = math.sqrt(sum(x * x for x in vector)) or 1.0
         return [x / norm for x in vector]
+
+    async def embed_many(self, texts: list[str]) -> list[list[float]]:
+        return [await self.embed(text) for text in texts]
