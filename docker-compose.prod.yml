@@ -1,0 +1,55 @@
+# Production stack. Reads backend/.env at runtime (Supabase DATABASE_URL, MIGRATION_DATABASE_URL, SUPABASE_*,
+# GEMINI_*, BACKEND_CORS_ORIGINS, ...). VITE_* values are build-time and come from the shell or a root .env.
+#   docker compose -f docker-compose.prod.yml up -d --build
+# Fully local demo (own Postgres, no Supabase database): add  -f docker-compose.localdb.yml
+name: fixmycampus-prod
+
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: docker/backend/Dockerfile
+  image: fixmycampus-backend:prod
+  env_file: backend/.env
+
+services:
+  migrate:
+    <<: *backend
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+  backend:
+    <<: *backend
+    # Single uvicorn process by design (auto-close loop and chatbot rate limit are in-process).
+    restart: unless-stopped
+    expose:
+      - "8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+      target: prod
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
+        VITE_ALLOWED_EMAIL_DOMAIN: ${VITE_ALLOWED_EMAIL_DOMAIN:-}
+    image: fixmycampus-frontend:prod
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # docker compose -f docker-compose.prod.yml --profile tools run --rm kb-load
+  kb-load:
+    <<: *backend
+    profiles: ["tools"]
+    command: ["python", "scripts/build_knowledge_base.py", "--input", "/data/knowledge/mvsrec/pages.jsonl"]
+    restart: "no"
+    volumes:
+      - ./data:/data:ro

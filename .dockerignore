@@ -1,8 +1,37 @@
+# Keep secrets, tests, tooling and local junk out of every image.
 .git
-.env
+.claude
+.gitignore
+.DS_Store
+
+# Env files: none, except frontend/.env, which holds only public values (Supabase URL + anon key).
+**/.env
+**/.env.*
+!frontend/.env
+
+# Python
 **/.venv
+**/venv
 **/__pycache__
+**/*.pyc
 **/.pytest_cache
-frontend/node_modules
-frontend/dist
+**/.mypy_cache
+**/.ruff_cache
+**/.coverage
+backend/tests
+backend/root_tests
+tests
+pytest.ini
+
+# Node
+**/node_modules
+**/dist
+**/coverage
+
+# Not needed at runtime (the knowledge-base loader reads ./data through a bind mount)
+data
+docs
 graphify-out
+docker-compose*.yml
+Makefile
+*.md

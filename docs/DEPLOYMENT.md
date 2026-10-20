@@ -117,6 +117,45 @@ npm run build   # outputs dist/
 Deploy `dist/` as a static site with an SPA fallback (every path serves `index.html`), so
 `/tickets/TICK-…` survives a refresh. The `VITE_*` values are baked in at build time.
 
+## Run with Docker
+
+| | Command | What you get |
+|---|---|---|
+| Development | `docker compose up --build` | hot-reload backend (:8000), Vite (:5173), local Postgres (:5432) |
+| Production | `docker compose -f docker-compose.prod.yml up -d --build` | nginx on `${HTTP_PORT:-80}` serving the SPA and proxying `/api/` and `/health`, backend, one-shot migration; database is the one in `backend/.env` (Supabase) |
+| Local demo | `docker compose -f docker-compose.prod.yml -f docker-compose.localdb.yml up -d --build` | same as production, but with its own pgvector Postgres (database `fixmycampus`, not published on the host) instead of Supabase |
+
+`make dev`, `make prod`, `make prod-local`, `make kb-load`, `make logs` are shortcuts for these.
+
+**Which variables go where**
+
+- `backend/.env`, read at runtime (never baked into an image): `DATABASE_URL`, `MIGRATION_DATABASE_URL`,
+  `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`, `BACKEND_CORS_ORIGINS`, and `ENVIRONMENT=production`.
+  The browser talks to nginx on the same origin, so CORS only matters if you host the frontend elsewhere.
+- `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_ALLOWED_EMAIL_DOMAIN`, read at **build** time (public
+  values, they end up in the JS bundle). Export them in the shell or a root `.env` before `up --build`; if they
+  are empty, the build uses `frontend/.env`. `VITE_API_BASE_URL` defaults to `/api/v1` (same origin). Changing any
+  of them needs a rebuild: `docker compose -f docker-compose.prod.yml build frontend`.
+
+**Knowledge base.** The college pages are not in the image. Load them from `./data` (mounted read-only) after the
+stack is up:
+
+```bash
+docker compose -f docker-compose.prod.yml --profile tools run --rm kb-load
+# prod-local: add -f docker-compose.localdb.yml (the loader then writes to the local database)
+```
+
+**Before you go live**
+
+- Supabase dashboard, Authentication, URL Configuration: set **Site URL** to the deployed address and add it
+  (and `<address>/**`) to **Redirect URLs**, or confirmation and password-reset links point at the wrong place.
+- The container serves plain HTTP. Put HTTPS in front of it (Caddy, or your host's proxy / load balancer) and
+  forward to `HTTP_PORT`; nginx keeps the `X-Forwarded-Proto` it receives.
+- The backend is a single process on purpose: the auto-close loop and the chatbot rate limit live in memory.
+  Do not add `--workers` or run several backend replicas without moving those out first.
+- Never run `docker-compose.prod.yml` alone when you only want to try things: it migrates the database in
+  `backend/.env`. Use the `localdb` overlay for experiments.
+
 ## 5. Running the tests
 
 ```bash

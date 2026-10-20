@@ -45,6 +45,7 @@ services:
     build:
       context: .
       dockerfile: docker/frontend/Dockerfile
+      target: dev
     container_name: fixmycampus_frontend
     restart: unless-stopped
     ports:

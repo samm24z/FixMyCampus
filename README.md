@@ -61,6 +61,9 @@ docker compose up --build
 - **API Health Endpoint**: [http://localhost:8000/api/v1/health](http://localhost:8000/api/v1/health)
 - **PostgreSQL + pgvector**: `localhost:5432`
 
+Production images (nginx + backend, with an optional all-local database for demos) are described in
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#run-with-docker): `docker compose -f docker-compose.prod.yml up -d --build`.
+
 ---
 
 ### Option 2: Local Development Setup

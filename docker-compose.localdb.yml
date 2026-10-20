@@ -1,0 +1,46 @@
+# Overlay for a fully local demo: its own Postgres instead of the Supabase database in backend/.env.
+#   docker compose -f docker-compose.prod.yml -f docker-compose.localdb.yml up -d --build
+# `environment:` beats `env_file:`, so the two database URLs below win over backend/.env.
+# Supabase Auth (SUPABASE_URL, keys) is still read from backend/.env.
+
+x-local-db-env: &local-db-env
+  DATABASE_URL: postgresql+asyncpg://postgres:${LOCAL_DB_PASSWORD:-postgres_password}@db:5432/fixmycampus
+  MIGRATION_DATABASE_URL: postgresql+asyncpg://postgres:${LOCAL_DB_PASSWORD:-postgres_password}@db:5432/fixmycampus
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${LOCAL_DB_PASSWORD:-postgres_password}
+      POSTGRES_DB: fixmycampus
+    # No published port: only the other containers can reach it.
+    volumes:
+      - local_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fixmycampus"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    environment: *local-db-env
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backend:
+    environment: *local-db-env
+    depends_on:
+      db:
+        condition: service_healthy
+
+  kb-load:
+    environment: *local-db-env
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  local_db_data:
