@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { UserPlus, Mail, KeyRound, User, School } from 'lucide-react';
+import { UserPlus, Mail, KeyRound, User, School, ChevronDown } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -103,15 +103,16 @@ export const RegisterPage: React.FC = () => {
           <div className="space-y-2">
             <label className="text-sm font-medium">Role</label>
             <div className="relative">
-              <School className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <School className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <select
-                className="w-full pl-9 pr-4 py-2 border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full appearance-none pl-9 pr-9 py-2 border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 value={form.role}
                 onChange={(event) => setForm({ ...form, role: event.target.value as 'STUDENT' | 'FACULTY' })}
               >
                 <option value="STUDENT">Student</option>
                 <option value="FACULTY">Faculty</option>
               </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             </div>
           </div>
           <div className="space-y-2">
