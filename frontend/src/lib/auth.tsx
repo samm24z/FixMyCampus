@@ -20,6 +20,10 @@ interface AuthContextValue {
   register: (form: RegisterForm) => Promise<{ user: User | null; needsConfirmation: boolean }>;
   requestPasswordReset: (email: string) => Promise<void>;
   updatePassword: (password: string) => Promise<void>;
+  /** Saves the signed-in user's own name / phone number and refreshes `user` everywhere. */
+  updateProfile: (changes: { full_name?: string; phone_number?: string | null }) => Promise<User>;
+  /** Checks the current password, then sets the new one. */
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -117,6 +121,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (error) throw error;
   }, []);
 
+  const updateProfile = useCallback(async (changes: { full_name?: string; phone_number?: string | null }) => {
+    const profile = (await authApi.updateMe(changes)).data;
+    setUser(profile);
+    return profile;
+  }, []);
+
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    const { data } = await supabase.auth.getUser();
+    const email = data.user?.email;
+    if (!email) throw new Error('Your session has expired. Sign in again to change your password.');
+    // Signing in again proves the current password and gives a fresh session, so Supabase's
+    // "secure password change" setting never asks for an emailed code. A wrong password
+    // leaves the existing session untouched.
+    const check = await supabase.auth.signInWithPassword({ email, password: currentPassword });
+    if (check.error) throw check.error;
+    // current_password is only read when the project requires it; otherwise it is ignored.
+    const { error } = await supabase.auth.updateUser({ password: newPassword, current_password: currentPassword });
+    if (error) throw error;
+  }, []);
+
   const logout = useCallback(async () => {
     await supabase.auth.signOut();
     userId.current = null;
@@ -124,8 +148,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const value = useMemo(
-    () => ({ user, isLoading, login, register, requestPasswordReset, updatePassword, logout }),
-    [user, isLoading, login, register, requestPasswordReset, updatePassword, logout],
+    () => ({ user, isLoading, login, register, requestPasswordReset, updatePassword, updateProfile, changePassword, logout }),
+    [user, isLoading, login, register, requestPasswordReset, updatePassword, updateProfile, changePassword, logout],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

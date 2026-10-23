@@ -259,3 +259,77 @@ async def test_unreachable_signing_keys_fail_closed(async_client, monkeypatch):
         serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode()
     token = es256_token(pem, "key-1", demo_user_id("admin"), "admin@fixmycampus.dev")
     assert (await me(async_client, token)).status_code == 401
+
+
+# ------------------------------------------------------- self-service profile edits
+
+def update_me(client: AsyncClient, headers: dict, body: dict):
+    return client.patch("/api/v1/auth/me", headers=headers, json=body)
+
+
+@pytest.fixture
+def fresh_student(auth_headers):
+    """A first-login student (removed after the test), so edits never touch the shared demo users."""
+    return auth_headers(uuid.uuid4(), "self.edit@mvsrec.edu.in", user_metadata={"full_name": "Self Edit"})
+
+
+async def test_users_can_change_their_own_name_and_phone(async_client, fresh_student):
+    response = await update_me(async_client, fresh_student, {"full_name": "  Riya   Sharma ", "phone_number": "+91 98765 43210"})
+    assert response.status_code == 200
+    assert response.json()["full_name"] == "Riya Sharma" and response.json()["phone_number"] == "+91 98765 43210"
+    again = (await async_client.get("/api/v1/auth/me", headers=fresh_student)).json()
+    assert again["full_name"] == "Riya Sharma" and again["phone_number"] == "+91 98765 43210"
+
+
+async def test_fields_left_out_are_unchanged_and_the_phone_can_be_cleared(async_client, fresh_student):
+    await update_me(async_client, fresh_student, {"phone_number": "040-2345 6789"})
+    body = (await update_me(async_client, fresh_student, {"phone_number": ""})).json()
+    assert body["phone_number"] is None and body["full_name"] == "Self Edit"
+
+
+@pytest.mark.parametrize("body", [
+    {"role": "ADMIN"},
+    {"department_id": str(uuid.uuid4())},
+    {"email": "someone.else@mvsrec.edu.in"},
+    {"is_active": False},
+    {"is_verified": True},
+    {"full_name": "Riya Sharma", "role": "ADMIN"},  # a valid field does not smuggle in a forbidden one
+])
+async def test_role_department_email_and_status_are_never_self_editable(async_client, fresh_student, body):
+    assert (await update_me(async_client, fresh_student, body)).status_code == 422
+    profile = (await async_client.get("/api/v1/auth/me", headers=fresh_student)).json()
+    assert profile["role"] == "STUDENT" and profile["department_id"] is None and profile["is_active"]
+    assert profile["email"] == "self.edit@mvsrec.edu.in" and profile["full_name"] == "Self Edit"
+
+
+@pytest.mark.parametrize("body", [
+    {"full_name": "R"},
+    {"full_name": "   "},
+    {"full_name": None},
+    {"full_name": "x" * 151},
+    {"phone_number": "call me"},
+    {"phone_number": "12345"},          # too few digits
+    {"phone_number": "+91 " + "9" * 16},  # too many digits
+])
+async def test_invalid_names_and_phone_numbers_are_refused(async_client, fresh_student, body):
+    assert (await update_me(async_client, fresh_student, body)).status_code == 422
+
+
+async def test_profile_edits_require_sign_in_and_are_audited(async_client, fresh_student):
+    assert (await async_client.patch("/api/v1/auth/me", json={"full_name": "Nobody"})).status_code == 401
+    user_id = (await update_me(async_client, fresh_student, {"full_name": "Audited Name"})).json()["id"]
+    from app.models import AuditLog
+    async with AsyncSessionLocal() as session:
+        row = await session.scalar(select(AuditLog).where(AuditLog.entity_id == uuid.UUID(user_id)))
+    assert row is not None and row.new_values == {"full_name": "Audited Name"}
+
+
+async def test_staff_can_edit_their_own_name_without_losing_their_department(async_client, login):
+    headers = await login("staff")
+    before = (await async_client.get("/api/v1/auth/me", headers=headers)).json()
+    try:
+        body = (await update_me(async_client, headers, {"full_name": "Renamed Staff"})).json()
+        assert body["full_name"] == "Renamed Staff"
+        assert body["role"] == "STAFF" and body["department_id"] == before["department_id"]
+    finally:
+        await update_me(async_client, headers, {"full_name": before["full_name"]})

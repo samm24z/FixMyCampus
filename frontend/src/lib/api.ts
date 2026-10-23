@@ -364,6 +364,8 @@ export function getApiError(error: unknown, fallback = 'Something went wrong. Pl
 export const authApi = {
   /** Profile (role, department) of the signed-in Supabase user; created on first call. */
   me: () => api.get<User>('/auth/me'),
+  /** Self-service edits; role, department and email stay admin-only. */
+  updateMe: (body: { full_name?: string; phone_number?: string | null }) => api.patch<User>('/auth/me', body),
 };
 
 export const departmentsApi = {

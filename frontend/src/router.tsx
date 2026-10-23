@@ -13,6 +13,7 @@ import { AssistantPage } from '@/pages/AssistantPage';
 import { CampusGuidePage } from '@/pages/CampusGuidePage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { CreateComplaintPage } from '@/pages/CreateComplaintPage';
+import { AccountPage } from '@/pages/AccountPage';
 import { ProtectedRoute } from '@/lib/auth';
 
 export const router = createBrowserRouter([
@@ -31,6 +32,8 @@ export const router = createBrowserRouter([
       { path: 'admin', element: <ProtectedRoute roles={['ADMIN']}><AdminPage /></ProtectedRoute> },
       { path: 'staff', element: <ProtectedRoute roles={['STAFF', 'COORDINATOR', 'ADMIN']}><StaffPage /></ProtectedRoute> },
       { path: 'assistant', element: <ProtectedRoute><AssistantPage /></ProtectedRoute> },
+      { path: 'account', element: <ProtectedRoute><AccountPage /></ProtectedRoute> },
+      { path: 'account/:section', element: <ProtectedRoute><AccountPage /></ProtectedRoute> },
       { path: 'campus-guide', element: <ProtectedRoute><CampusGuidePage /></ProtectedRoute> },
       { path: '*', element: <NotFoundPage /> },
     ],
