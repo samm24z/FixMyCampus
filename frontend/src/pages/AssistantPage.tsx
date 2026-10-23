@@ -4,7 +4,10 @@ import { BotMessageSquare, ExternalLink, Map as MapIcon, Mail, Phone, Send, Tick
 import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { LocationPicker } from '@/components/LocationPicker';
-import { CATEGORY_OPTIONS, assistantApi, getApiError, ticketsApi, type AssistantAction, type TicketPriority } from '@/lib/api';
+import { MediaSection } from '@/components/media/MediaSection';
+import type { ReportPoint } from '@/components/media/LocationExtras';
+import { useReportMedia } from '@/components/media/useReportMedia';
+import { CATEGORY_OPTIONS, assistantApi, getApiError, ticketsApi, type AssistantAction, type MediaDraft, type TicketPriority } from '@/lib/api';
 import {
   STARTER_QUESTIONS, historyForRequest, isAppLink, isWebLink, mailHref, runTicketAction, telHref,
   ticketActionButton, ticketActionDone, ticketActionTitle, type ChatMessage, type TicketAction,
@@ -22,15 +25,44 @@ function ReportCard({ action }: { action: Extract<AssistantAction, { type: 'repo
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
   const [ticketNumber, setTicketNumber] = useState('');
+  const media = useReportMedia();
+  const [point, setPoint] = useState<ReportPoint | null>(null);
+  const [observedAt, setObservedAt] = useState<Date | null>(null);
+  const [picker, setPicker] = useState({ key: 0, initial: action.location });
 
   const update = (field: keyof typeof form, value: string) => setForm((current) => ({ ...current, [field]: value }));
   const ready = form.title.trim().length >= 5 && form.description.trim().length >= 10 && form.location.trim().length >= 2;
+
+  function applyDraft(draft: MediaDraft) {
+    setForm((current) => ({
+      ...current,
+      title: draft.title,
+      description: draft.description,
+      category: CATEGORY_OPTIONS.includes(draft.category) ? draft.category : current.category,
+      priority: PRIORITIES.includes(draft.priority) ? draft.priority : current.priority,
+      location: current.location || draft.location_hint || '',
+    }));
+    if (!form.location && draft.location_hint) setPicker((current) => ({ key: current.key + 1, initial: draft.location_hint as string }));
+  }
 
   async function send() {
     setError('');
     setSending(true);
     try {
-      const response = await ticketsApi.create({ ...form, title: form.title.trim(), description: form.description.trim(), location: form.location.trim() });
+      const response = await ticketsApi.create({
+        ...form,
+        title: form.title.trim(),
+        description: form.description.trim(),
+        location: form.location.trim(),
+        attachment_ids: media.readyIds,
+        observed_at: observedAt ? observedAt.toISOString() : null,
+        report_lat: point?.lat ?? null,
+        report_lng: point?.lng ?? null,
+        report_accuracy_m: point?.accuracy_m ?? null,
+        location_source: point?.source ?? null,
+      });
+      // The photos belong to the ticket now, so clear the list without deleting them.
+      media.reset();
       setTicketNumber(response.data.ticket_number);
     } catch (requestError) {
       setError(getApiError(requestError));
@@ -62,9 +94,10 @@ function ReportCard({ action }: { action: Extract<AssistantAction, { type: 'repo
           {PRIORITIES.map((priority) => <option key={priority} value={priority}>{priorityLabel(priority)}</option>)}
         </select>
       </div>
-      <LocationPicker initial={action.location} onChange={(location) => update('location', location)} />
-      <Button size="sm" className="gap-2" disabled={sending || !ready} onClick={send}>
-        <Send className="h-4 w-4" /> {sending ? 'Sending...' : 'Send report'}
+      <LocationPicker key={picker.key} initial={picker.initial} onChange={(location) => update('location', location)} />
+      <MediaSection compact media={media} description={form.description} location={form.location} onDraft={applyDraft} onPoint={setPoint} onObservedAt={setObservedAt} />
+      <Button size="sm" className="gap-2" disabled={sending || !ready || media.busy} onClick={send}>
+        <Send className="h-4 w-4" /> {sending ? 'Sending...' : media.busy ? 'Waiting for photos...' : 'Send report'}
       </Button>
     </div>
   );

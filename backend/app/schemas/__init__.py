@@ -8,7 +8,7 @@ from app.schemas.department import (
 )
 from app.schemas.ticket import TicketBase, TicketCreate, TicketTriageUpdate, TicketStatusChange, TicketReopenRequest, TicketWithdrawRequest, TicketRead, TicketFilter, TicketSummary
 from app.schemas.comment import CommentCreate, CommentRead
-from app.schemas.attachment import AttachmentCreate, AttachmentRead
+from app.schemas.attachment import AttachmentRead, AttachmentView, MediaDraft
 from app.schemas.status_history import StatusChangeRequest, StatusHistoryRead
 from app.schemas.assignment import AssignmentCreate, AssignmentRead
 from app.schemas.feedback import FeedbackCreate, FeedbackRead
@@ -53,7 +53,8 @@ __all__ = [
     "TicketSummary",
     "CommentCreate",
     "CommentRead",
-    "AttachmentCreate",
+    "AttachmentView",
+    "MediaDraft",
     "AttachmentRead",
     "StatusChangeRequest",
     "StatusHistoryRead",

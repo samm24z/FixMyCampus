@@ -140,6 +140,20 @@ class Settings(BaseSettings):
     AI_SIMILARITY_THRESHOLD: float = 0.75
     AI_AUTO_GROUP_THRESHOLD: float = 0.90
 
+    # Photo and video uploads. Files go straight from the browser to storage through signed
+    # links; the backend only issues links, checks the result and makes thumbnails.
+    STORAGE_BACKEND: str = "supabase"  # supabase | memory (tests); azure / s3 later
+    STORAGE_BUCKET: str = "ticket-media"
+    UPLOAD_MAX_PHOTOS: int = 5
+    # Photos are shrunk in the browser first (about 0.3-0.8 MB), so this is generous.
+    UPLOAD_MAX_IMAGE_BYTES: int = 5 * 1024 * 1024
+    UPLOAD_MAX_VIDEO_BYTES: int = 50 * 1024 * 1024
+    UPLOAD_MAX_VIDEO_SECONDS: int = 30
+    UPLOAD_DRAFT_HOURS: int = 24
+    UPLOADS_PER_10_MINUTES: int = 30
+    MEDIA_DESCRIBE_PER_MINUTE: int = 4
+    MEDIA_DESCRIBE_TIMEOUT_SECONDS: float = 20.0
+
     @property
     def allowed_email_domains(self) -> list[str]:
         return [d.strip().lower().lstrip("@") for d in self.ALLOWED_EMAIL_DOMAINS.split(",") if d.strip()]

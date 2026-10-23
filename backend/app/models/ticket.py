@@ -74,6 +74,13 @@ class Ticket(Base, UUIDMixin, TimestampMixin):
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     reopened_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # When the problem was seen (may differ from when it was reported) and where the reporter was
+    observed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    report_lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    report_lng: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    report_accuracy_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    location_source: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+
     # Relationships
     creator: Mapped["User"] = relationship("User", foreign_keys=[created_by], back_populates="tickets_created")
     assignee: Mapped[Optional["User"]] = relationship("User", foreign_keys=[assigned_to], back_populates="tickets_assigned")
@@ -126,19 +133,37 @@ class TicketAttachment(Base, UUIDMixin, TimestampMixin):
 
     __tablename__ = "ticket_attachments"
 
-    ticket_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("tickets.id", ondelete="CASCADE"), index=True, nullable=False
+    # Null while the photo is a draft (uploaded before the ticket is filed)
+    ticket_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tickets.id", ondelete="CASCADE"), index=True, nullable=True
     )
     uploaded_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
     )
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    file_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(500), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
 
+    # Media details: draft -> ready (or rejected). The stored file itself never keeps EXIF; capture
+    # time and GPS read in the browser live only in these columns.
+    kind: Mapped[str] = mapped_column(String(10), default="image", server_default="image", nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), default="draft", server_default="draft", index=True, nullable=False
+    )
+    thumb_key: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    width: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    duration_s: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    sha256: Mapped[Optional[str]] = mapped_column(String(64), index=True, nullable=True)
+    captured_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    gps_lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    gps_lng: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    gps_accuracy_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True, nullable=True)
+
     # Relationships
-    ticket: Mapped["Ticket"] = relationship("Ticket", back_populates="attachments")
+    ticket: Mapped[Optional["Ticket"]] = relationship("Ticket", back_populates="attachments")
     uploader: Mapped["User"] = relationship("User", back_populates="attachments")
 
 

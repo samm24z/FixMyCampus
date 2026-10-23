@@ -4,7 +4,10 @@ import { ArrowLeft, Send, TicketPlus } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { LocationPicker } from '@/components/LocationPicker';
-import { CATEGORY_OPTIONS, getApiError, ticketsApi, type TicketPriority } from '@/lib/api';
+import { MediaSection } from '@/components/media/MediaSection';
+import type { ReportPoint } from '@/components/media/LocationExtras';
+import { useReportMedia } from '@/components/media/useReportMedia';
+import { CATEGORY_OPTIONS, getApiError, ticketsApi, type MediaDraft, type TicketPriority } from '@/lib/api';
 import { PRIORITIES, priorityLabel } from '@/lib/tickets';
 
 export const CreateComplaintPage: React.FC = () => {
@@ -12,9 +15,26 @@ export const CreateComplaintPage: React.FC = () => {
   const [form, setForm] = useState({ title: '', description: '', category: CATEGORY_OPTIONS[0], location: '', priority: 'MEDIUM' as TicketPriority });
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const media = useReportMedia();
+  const [point, setPoint] = useState<ReportPoint | null>(null);
+  const [observedAt, setObservedAt] = useState<Date | null>(null);
+  // LocationPicker only reads `initial` when it mounts, so a new place from the photos remounts it.
+  const [picker, setPicker] = useState({ key: 0, initial: '' });
 
   function updateField(field: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function applyDraft(draft: MediaDraft) {
+    setForm((current) => ({
+      ...current,
+      title: draft.title,
+      description: draft.description,
+      category: CATEGORY_OPTIONS.includes(draft.category) ? draft.category : current.category,
+      priority: PRIORITIES.includes(draft.priority) ? draft.priority : current.priority,
+      location: current.location || draft.location_hint || '',
+    }));
+    if (!form.location && draft.location_hint) setPicker((current) => ({ key: current.key + 1, initial: draft.location_hint as string }));
   }
 
   async function handleSubmit(event: React.FormEvent) {
@@ -22,7 +42,15 @@ export const CreateComplaintPage: React.FC = () => {
     setError('');
     setIsSubmitting(true);
     try {
-      const response = await ticketsApi.create(form);
+      const response = await ticketsApi.create({
+        ...form,
+        attachment_ids: media.readyIds,
+        observed_at: observedAt ? observedAt.toISOString() : null,
+        report_lat: point?.lat ?? null,
+        report_lng: point?.lng ?? null,
+        report_accuracy_m: point?.accuracy_m ?? null,
+        location_source: point?.source ?? null,
+      });
       navigate(`/tickets/${response.data.ticket_number}`, { state: { created: true } });
     } catch (submissionError) {
       setError(getApiError(submissionError));
@@ -66,8 +94,9 @@ export const CreateComplaintPage: React.FC = () => {
                 </select>
               </div>
             </div>
-            <LocationPicker onChange={(location) => updateField('location', location)} />
-            <Button type="submit" className="gap-2" disabled={isSubmitting}><Send className="h-4 w-4" /> {isSubmitting ? 'Sending...' : 'Send Report'}</Button>
+            <LocationPicker key={picker.key} initial={picker.initial} onChange={(location) => updateField('location', location)} />
+            <MediaSection media={media} description={form.description} location={form.location} onDraft={applyDraft} onPoint={setPoint} onObservedAt={setObservedAt} />
+            <Button type="submit" className="gap-2" disabled={isSubmitting || media.busy}><Send className="h-4 w-4" /> {isSubmitting ? 'Sending...' : media.busy ? 'Waiting for photos...' : 'Send Report'}</Button>
           </form>
         </CardContent>
       </Card>

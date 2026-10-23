@@ -1,10 +1,12 @@
 """Ticket Pydantic schemas."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from app.core.config import settings
 from app.models.enums import CategoryEnum, PriorityEnum, TicketStatusEnum
+from app.schemas.attachment import LocationSource
 
 CATEGORY_VALUES = {category.value for category in CategoryEnum}
 
@@ -24,10 +26,44 @@ class TicketBase(BaseModel):
 
 
 class TicketCreate(TicketBase):
+    # Ready photos uploaded earlier through POST /uploads; linked to the ticket when it is created.
+    attachment_ids: list[uuid.UUID] = Field(default_factory=list)
+    # When the problem was seen (defaults to now), and where the reporter says it is.
+    observed_at: Optional[datetime] = None
+    report_lat: Optional[float] = Field(None, ge=-90, le=90)
+    report_lng: Optional[float] = Field(None, ge=-180, le=180)
+    report_accuracy_m: Optional[float] = Field(None, ge=0, le=100_000)
+    location_source: Optional[LocationSource] = None
+
     @field_validator("category")
     @classmethod
     def category_must_be_known(cls, value: str) -> str:
         return validate_category(value)  # type: ignore[return-value]
+
+    @field_validator("attachment_ids")
+    @classmethod
+    def limit_photos(cls, value: list[uuid.UUID]) -> list[uuid.UUID]:
+        unique = list(dict.fromkeys(value))
+        if len(unique) > settings.UPLOAD_MAX_PHOTOS:
+            raise ValueError(f"You can attach up to {settings.UPLOAD_MAX_PHOTOS} photos")
+        return unique
+
+    @field_validator("observed_at")
+    @classmethod
+    def not_in_the_future(cls, value: Optional[datetime]) -> Optional[datetime]:
+        if value is None:
+            return value
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        if value > datetime.now(timezone.utc) + timedelta(minutes=5):
+            raise ValueError("observed_at can't be in the future")
+        return value
+
+    @model_validator(mode="after")
+    def position_needs_both_coordinates(self) -> "TicketCreate":
+        if (self.report_lat is None) != (self.report_lng is None):
+            raise ValueError("report_lat and report_lng must be given together")
+        return self
 
 
 class TicketTriageUpdate(BaseModel):

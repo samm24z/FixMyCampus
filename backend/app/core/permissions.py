@@ -104,6 +104,11 @@ def can_view_ticket(user: User, ticket: Ticket) -> bool:
     return False
 
 
+def can_see_media_location(user: User, ticket: Ticket) -> bool:
+    """Where and when a photo was taken (and the reporter's pin) is for the reporter and staff only."""
+    return can_view_ticket(user, ticket) and (ticket.created_by == user.id or user.role in STAFF_ROLES)
+
+
 def can_comment(user: User, ticket: Ticket) -> bool:
     return can_view_ticket(user, ticket) and ticket.status != S.CLOSED.value
 

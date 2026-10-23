@@ -133,7 +133,99 @@ export interface GroupMember {
   created_at: string;
 }
 
+export type LocationSource = 'picker' | 'device' | 'photo';
+
+export interface GeoPoint {
+  lat: number;
+  lng: number;
+  accuracy_m?: number | null;
+}
+
+export interface TicketCreateBody {
+  title: string;
+  description: string;
+  category: string;
+  location: string;
+  priority: TicketPriority;
+  /** Ids of the user's own finished uploads (status "ready"), at most 5. */
+  attachment_ids?: string[];
+  /** When the student noticed the problem (ISO string); defaults to now on the server. */
+  observed_at?: string | null;
+  report_lat?: number | null;
+  report_lng?: number | null;
+  report_accuracy_m?: number | null;
+  location_source?: LocationSource | null;
+}
+
+export type MediaKind = 'image' | 'video';
+
+/** Where the browser sends the file: `upload_method upload_url` with `upload_headers`, raw bytes as body. */
+export interface UploadTicket {
+  upload_id: string;
+  upload_url: string;
+  upload_method: string;
+  upload_headers: Record<string, string>;
+  expires_at: string;
+}
+
+export interface UploadCompleteBody {
+  captured_at?: string | null;
+  gps?: GeoPoint | null;
+  duration_s?: number | null;
+}
+
+export interface Attachment {
+  id: string;
+  ticket_id: string | null;
+  kind: MediaKind;
+  status: 'draft' | 'ready' | 'rejected';
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+  width: number | null;
+  height: number | null;
+  duration_s: number | null;
+  captured_at: string | null;
+  created_at: string;
+}
+
+/** A ticket's photo/video with short-lived signed links. Time and GPS only for the reporter and staff. */
+export interface AttachmentView {
+  id: string;
+  kind: MediaKind;
+  file_name: string;
+  mime_type: string;
+  width: number | null;
+  height: number | null;
+  duration_s: number | null;
+  created_at: string;
+  view_url: string | null;
+  thumb_url: string | null;
+  captured_at: string | null;
+  gps_lat: number | null;
+  gps_lng: number | null;
+  gps_accuracy_m: number | null;
+}
+
+/** Gemini's draft from the photos; the student reviews it before sending. */
+export interface MediaDraft {
+  title: string;
+  description: string;
+  category: string;
+  priority: TicketPriority;
+  location_hint: string | null;
+  confidence: number;
+  contains_people: boolean;
+}
+
 export interface TicketDetail extends Ticket {
+  observed_at: string | null;
+  location_source: LocationSource | null;
+  /** Only for the reporter and for staff, coordinators and admins. */
+  report_lat: number | null;
+  report_lng: number | null;
+  report_accuracy_m: number | null;
+  attachment_count: number;
   created_by_name: string;
   assigned_to_name: string | null;
   department_name: string | null;
@@ -292,11 +384,36 @@ export const usersApi = {
     api.patch<User>(`/users/${id}`, body),
 };
 
+export const uploadsApi = {
+  /** Step 1: ask for a signed link and create a draft upload. */
+  create: (body: { kind: MediaKind; content_type: string; size: number; file_name: string }) =>
+    api.post<UploadTicket>('/uploads', body),
+  /**
+   * Step 2: send the bytes straight to storage. Uses plain axios, not `api`: the signed link
+   * carries its own token and must not get our Authorization header.
+   */
+  send: (ticket: UploadTicket, file: Blob, onProgress?: (fraction: number) => void) =>
+    axios.request({
+      method: ticket.upload_method,
+      url: ticket.upload_url,
+      headers: ticket.upload_headers,
+      data: file,
+      onUploadProgress: (event) => {
+        if (onProgress && event.total) onProgress(event.loaded / event.total);
+      },
+    }),
+  /** Step 3: the server checks the file, strips metadata and makes a thumbnail. */
+  complete: (id: string, body: UploadCompleteBody) => api.post<Attachment>(`/uploads/${id}/complete`, body),
+  remove: (id: string) => api.delete<void>(`/uploads/${id}`),
+  describe: (body: { upload_ids: string[]; note?: string | null; place?: string | null }) =>
+    api.post<MediaDraft>('/uploads/describe', body),
+  forTicket: (ref: string) => api.get<AttachmentView[]>(`/tickets/${ref}/attachments`),
+};
+
 export const ticketsApi = {
   list: (params: TicketListParams = {}) => api.get<Paginated<Ticket>>('/tickets', { params: clean(params) }),
   summary: () => api.get<DashboardSummary>('/tickets/summary'),
-  create: (body: { title: string; description: string; category: string; location: string; priority: TicketPriority }) =>
-    api.post<TicketDetail>('/tickets', body),
+  create: (body: TicketCreateBody) => api.post<TicketDetail>('/tickets', body),
   detail: (ref: string) => api.get<TicketDetail>(`/tickets/${ref}`),
   triage: (ref: string, body: { category?: string; priority?: TicketPriority }) =>
     api.patch<TicketDetail>(`/tickets/${ref}`, body),

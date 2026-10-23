@@ -56,6 +56,7 @@ from app.schemas.ticket_detail import (
     TicketPermissions,
 )
 from app.services import group_service
+from app.services import upload_service
 from app.services.audit_service import record_audit
 
 S = TicketStatusEnum
@@ -86,6 +87,7 @@ def _detail_query():
         selectinload(Ticket.status_history),
         selectinload(Ticket.assignments),
         selectinload(Ticket.feedback),
+        selectinload(Ticket.attachments),
     )
 
 
@@ -209,8 +211,15 @@ def build_detail(ticket: Ticket, user: User) -> TicketDetailRead:
         for comment in sorted(ticket.comments, key=lambda item: item.created_at)
         if show_internal or not comment.is_internal
     ]
+    show_location = policy.can_see_media_location(user, ticket)
     return TicketDetailRead(
         **base,
+        observed_at=ticket.observed_at,
+        location_source=ticket.location_source,
+        attachment_count=sum(1 for item in ticket.attachments if item.status == "ready"),
+        report_lat=ticket.report_lat if show_location else None,
+        report_lng=ticket.report_lng if show_location else None,
+        report_accuracy_m=ticket.report_accuracy_m if show_location else None,
         created_by_name=ticket.creator.full_name,
         assigned_to_name=ticket.assignee.full_name if ticket.assignee else None,
         department_name=ticket.confirmed_department.name if ticket.confirmed_department else None,
@@ -284,6 +293,7 @@ def _record_status(db: AsyncSession, ticket: Ticket, user: Optional[User], old: 
 # --------------------------------------------------------------- operations
 
 async def create_ticket(db: AsyncSession, user: User, payload: TicketCreate) -> TicketDetailRead:
+    photos = await upload_service.claim_for_ticket(db, user, payload.attachment_ids)  # 422 before anything is created
     sequence = await db.scalar(text("SELECT nextval('ticket_number_seq')"))
     now = _now()
     ticket = Ticket(
@@ -296,10 +306,16 @@ async def create_ticket(db: AsyncSession, user: User, payload: TicketCreate) -> 
         status=S.NEW.value,
         ai_status="pending" if settings.AI_SUGGESTIONS_ENABLED else None,
         created_by=user.id,
+        observed_at=payload.observed_at or now,
+        report_lat=payload.report_lat,
+        report_lng=payload.report_lng,
+        report_accuracy_m=payload.report_accuracy_m,
+        location_source=payload.location_source,
         sla_deadline=await _sla_deadline(db, payload.category, payload.priority.value, now),
     )
     db.add(ticket)
     await db.flush()
+    upload_service.link_to_ticket(db, user, ticket, photos)
     _record_status(db, ticket, user, None, S.NEW.value)
     record_audit(
         db, user=user, action=AuditActionEnum.CREATE, entity_type="ticket", entity_id=ticket.id,

@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { TicketGallery } from '@/components/TicketGallery';
 import {
   CATEGORY_OPTIONS,
   departmentsApi,
@@ -152,6 +153,8 @@ export const TicketDetailPage: React.FC = () => {
               </div>
             </CardContent>
           </Card>
+
+          <TicketGallery ticket={ticket} />
 
           {permissions.can_review_suggestions && (
             <Card>

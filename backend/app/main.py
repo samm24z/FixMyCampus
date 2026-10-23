@@ -11,7 +11,7 @@ from app.api.v1.health import router as health_router
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.core.exceptions import register_exception_handlers
-from app.services import ticket_service
+from app.services import ticket_service, upload_service
 
 logger = logging.getLogger("app.auto_close")
 
@@ -27,6 +27,15 @@ async def _auto_close_loop(interval_minutes: int) -> None:
             raise
         except Exception:
             logger.exception("Auto-close pass failed")
+        try:
+            async with AsyncSessionLocal() as db:
+                purged = await upload_service.purge_expired_drafts(db)
+            if purged:
+                logger.info("Purged %d expired photo upload(s)", purged)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Upload purge failed")
         await asyncio.sleep(interval_minutes * 60)
 
 

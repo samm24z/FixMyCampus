@@ -1,11 +1,13 @@
 """Ticket detail, dashboard, and action schemas."""
 
 import uuid
+from datetime import datetime
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 
 from app.models.enums import TicketStatusEnum
+from app.schemas.attachment import LocationSource
 from app.schemas.ai import DuplicateCandidateSummary, TicketSuggestions
 from app.schemas.assignment import AssignmentRead
 from app.schemas.comment import CommentRead
@@ -48,6 +50,13 @@ class TicketDetailRead(TicketRead):
     suggestions: Optional[TicketSuggestions] = None
     duplicates: List[DuplicateCandidateSummary] = []
     group_members: List[GroupMemberRead] = []
+    observed_at: Optional[datetime] = None
+    location_source: Optional[LocationSource] = None
+    attachment_count: int = 0
+    # Where the reporter said the problem is: the reporter and staff only, empty for everyone else.
+    report_lat: Optional[float] = None
+    report_lng: Optional[float] = None
+    report_accuracy_m: Optional[float] = None
 
 
 class DashboardSummary(BaseModel):
