@@ -138,6 +138,8 @@ export default function NotificationsScreen() {
       />
       <FlatList
         data={items}
+        // Keeps the first rows below the see-through header, as Screen's ScrollView does.
+        contentInsetAdjustmentBehavior="automatic"
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <NotificationRow item={item} onPress={() => open(item)} />}
         ListHeaderComponent={

@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useQuery } from '@tanstack/react-query';
-import { router, useFocusEffect } from 'expo-router';
-import React, { useCallback } from 'react';
+import { router } from 'expo-router';
+import React from 'react';
 import { Pressable, View } from 'react-native';
 import { AppText } from '@/components/ui';
 import { Spacing, useColors } from '@/constants/theme';
@@ -9,7 +9,10 @@ import { notificationsApi } from '@/lib/api';
 
 export const UNREAD_COUNT_KEY = ['notifications', 'unread-count'] as const;
 
-/** Header bell with a badge for unread notifications. Opens the notifications screen. */
+/**
+ * Header bell with a badge for unread notifications. Opens the notifications screen.
+ * Header components don't get focus events, so the Tickets screen refreshes the count when it comes back into view.
+ */
 export function NotificationBell() {
   const colors = useColors();
   const unread = useQuery({
@@ -17,15 +20,6 @@ export function NotificationBell() {
     queryFn: async () => (await notificationsApi.unreadCount()).data.count,
     refetchInterval: 60_000,
   });
-  const { refetch } = unread;
-
-  // Refresh when the screen comes back into view (for example after reading notifications).
-  useFocusEffect(
-    useCallback(() => {
-      void refetch();
-    }, [refetch]),
-  );
-
   const count = unread.data ?? 0;
   return (
     <Pressable

@@ -1,9 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { openBrowserAsync } from 'expo-web-browser';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, View } from 'react-native';
+import { UNREAD_COUNT_KEY } from '@/components/notifications/NotificationBell';
 import { TicketRow } from '@/components/tickets/TicketRow';
 import { AppText, Button, Card, EmptyState, ErrorBanner, Loading, Screen, SegmentedChoice, TextField } from '@/components/ui';
 import { Spacing, useColors } from '@/constants/theme';
@@ -59,10 +60,28 @@ export default function MyTicketsScreen() {
   const firstName = user?.full_name?.split(' ')[0] ?? '';
   const isStaff = user?.role === 'STAFF' || user?.role === 'COORDINATOR' || user?.role === 'ADMIN';
 
+  // Coming back to this tab (e.g. after opening a ticket or a notification) shows fresh numbers.
+  const firstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (firstFocus.current) {
+        firstFocus.current = false;
+        return;
+      }
+      void queryClient.invalidateQueries({ queryKey: ['summary'] });
+      void queryClient.invalidateQueries({ queryKey: ['tickets', 'mine'] });
+      void queryClient.invalidateQueries({ queryKey: UNREAD_COUNT_KEY });
+    }, [queryClient]),
+  );
+
   async function refresh() {
     setRefreshing(true);
     try {
-      await Promise.all([summary.refetch(), queryClient.resetQueries({ queryKey: ['tickets', 'mine', filter, debouncedSearch] })]);
+      await Promise.all([
+        summary.refetch(),
+        queryClient.resetQueries({ queryKey: ['tickets', 'mine', filter, debouncedSearch] }),
+        queryClient.invalidateQueries({ queryKey: UNREAD_COUNT_KEY }),
+      ]);
     } finally {
       setRefreshing(false);
     }
