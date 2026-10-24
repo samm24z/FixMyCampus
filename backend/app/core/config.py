@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     # checks every AUTO_CLOSE_INTERVAL_MINUTES (0 = disabled; use scripts/close_resolved_tickets.py from cron).
     AUTO_CLOSE_RESOLVED_AFTER_DAYS: int = 7
     AUTO_CLOSE_INTERVAL_MINUTES: int = 60
+    # The same loop sends "due soon" / "overdue" alerts and deletes read notifications older than this.
+    SLA_ALERTS_ENABLED: bool = True
+    NOTIFICATION_RETENTION_DAYS: int = 90
 
     # Server settings
     BACKEND_HOST: str = "0.0.0.0"

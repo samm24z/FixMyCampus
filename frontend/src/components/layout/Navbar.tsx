@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth';
 import { CAMPUS } from '@/lib/campus';
 import { AccountMenu } from './AccountMenu';
+import { NotificationBell } from './NotificationBell';
 import type { Role } from '@/lib/api';
 
 export const Navbar: React.FC = () => {
@@ -76,7 +77,10 @@ export const Navbar: React.FC = () => {
 
         <div className="flex items-center gap-3">
           {user ? (
-            <AccountMenu user={user} onSignOut={logout} />
+            <>
+              <NotificationBell />
+              <AccountMenu user={user} onSignOut={logout} />
+            </>
           ) : (
             <>
               <Link to="/login" className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"><LogIn className="h-4 w-4" /><span>Sign In</span></Link>

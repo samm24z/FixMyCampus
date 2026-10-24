@@ -3,30 +3,33 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field, model_validator
 from app.models.enums import NotificationTypeEnum
-
-
-class NotificationCreate(BaseModel):
-    user_id: uuid.UUID
-    ticket_id: Optional[uuid.UUID] = None
-    title: str = Field(..., max_length=200)
-    message: str
-    type: NotificationTypeEnum = NotificationTypeEnum.STATUS_CHANGED
 
 
 class NotificationRead(BaseModel):
     id: uuid.UUID
-    user_id: uuid.UUID
     ticket_id: Optional[uuid.UUID] = None
+    ticket_number: Optional[str] = None
     title: str
     message: str
     type: NotificationTypeEnum
     is_read: bool
     created_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
-
 
 class NotificationMarkRead(BaseModel):
-    notification_ids: list[uuid.UUID]
+    """Either some of the caller's notifications (``ids``) or all of them (``all``)."""
+
+    ids: list[uuid.UUID] = Field(default_factory=list, max_length=100)
+    all: bool = False
+
+    @model_validator(mode="after")
+    def _one_of(self) -> "NotificationMarkRead":
+        if not self.all and not self.ids:
+            raise ValueError("Say which notifications to mark as read, or all of them")
+        return self
+
+
+class UnreadCount(BaseModel):
+    count: int

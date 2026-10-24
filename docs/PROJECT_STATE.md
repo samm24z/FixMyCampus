@@ -1,5 +1,13 @@
 # Current Project State
 
+## Update 2026-10-24: notifications and SLA alerts
+
+- Roadmap and per-feature plans now live in `docs/plans/`.
+- **In-app notifications** (`app/services/notification_service.py`, `GET /notifications`, `GET /notifications/unread-count`, `POST /notifications/read`). Rows are staged in the same transaction as the change. Who hears about what is in `docs/plans/01-notifications.md`; nobody is told about their own action, staff-only notes never reach reporters, and the list hides notifications about tickets the person can no longer see.
+- **SLA alerts** (`app/services/sla_service.py`): the background loop sends a "due soon" alert (assignee, else coordinators) when a ticket enters its rule's warning window and an "overdue" alert (assignee and coordinators, plus a `SLA_BREACH` audit row) when the deadline passes. Once per deadline; changing it resets `tickets.sla_warned_at`/`sla_breached_at` (migration `20261024_0009`). The loop also deletes read notifications older than `NOTIFICATION_RETENTION_DAYS` (90). Cron one-shot: `scripts/check_sla_deadlines.py`.
+- Web: bell with unread badge in the navbar. Mobile: bell on the Tickets tab and a Notifications screen.
+- 273 backend tests (18 new), 51 frontend tests.
+
 ## Update 2026-10-08: ticket lifecycle cleanup and resolution feedback
 
 - **Remarks required** (`requires_remarks` in `permissions.py`, enforced in `change_status`): moving to RESOLVED needs a resolution note, closing a NEW/UNDER_REVIEW ticket needs a rejection reason. Blank/whitespace gives 422.

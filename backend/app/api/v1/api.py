@@ -1,7 +1,7 @@
 """API v1 Router registry."""
 
 from fastapi import APIRouter
-from app.api.v1 import assistant, auth, campus, departments, health, media, tickets, uploads, users
+from app.api.v1 import assistant, auth, campus, departments, health, media, notifications, tickets, uploads, users
 
 api_router = APIRouter()
 
@@ -11,6 +11,7 @@ api_router.include_router(auth.router, tags=["Authentication"])
 api_router.include_router(users.router, tags=["Users"])
 api_router.include_router(departments.router, tags=["Departments"])
 api_router.include_router(tickets.router, tags=["Tickets"])
+api_router.include_router(notifications.router, tags=["Notifications"])
 api_router.include_router(assistant.router, tags=["Assistant"])
 api_router.include_router(campus.router, tags=["Campus"])
 api_router.include_router(uploads.router, tags=["Uploads"])

@@ -246,6 +246,33 @@ export interface Paginated<T> {
   total_pages: number;
 }
 
+export type NotificationType =
+  | 'TICKET_CREATED'
+  | 'STATUS_CHANGED'
+  | 'ASSIGNED'
+  | 'SLA_WARNING'
+  | 'SLA_BREACH'
+  | 'FEEDBACK_REQUEST'
+  | 'FEEDBACK_RECEIVED'
+  | 'COMMENT_ADDED';
+
+export interface AppNotification {
+  id: string;
+  ticket_id: string | null;
+  ticket_number: string | null;
+  title: string;
+  message: string;
+  type: NotificationType;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface NotificationListParams {
+  unread_only?: boolean;
+  page?: number;
+  page_size?: number;
+}
+
 export interface DashboardSummary {
   total_tickets: number;
   open_tickets: number;
@@ -441,6 +468,15 @@ export const ticketsApi = {
   sameProblem: (ref: string, otherRef: string) => api.post<TicketDetail>(`/tickets/${ref}/duplicates/${otherRef}/group`),
   notSameProblem: (ref: string, otherRef: string) => api.post<TicketDetail>(`/tickets/${ref}/duplicates/${otherRef}/dismiss`),
   splitFromGroup: (ref: string) => api.post<TicketDetail>(`/tickets/${ref}/group/split`),
+};
+
+export const notificationsApi = {
+  list: (params: NotificationListParams = {}) =>
+    api.get<Paginated<AppNotification>>('/notifications', { params: clean(params) }),
+  unreadCount: () => api.get<{ count: number }>('/notifications/unread-count'),
+  /** Returns how many are still unread afterwards. */
+  markRead: (ids: string[]) => api.post<{ count: number }>('/notifications/read', { ids }),
+  markAllRead: () => api.post<{ count: number }>('/notifications/read', { all: true }),
 };
 
 export const assistantApi = {

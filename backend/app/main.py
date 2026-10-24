@@ -11,7 +11,7 @@ from app.api.v1.health import router as health_router
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.core.exceptions import register_exception_handlers
-from app.services import ticket_service, upload_service
+from app.services import notification_service, sla_service, ticket_service, upload_service
 
 logger = logging.getLogger("app.auto_close")
 
@@ -36,6 +36,25 @@ async def _auto_close_loop(interval_minutes: int) -> None:
             raise
         except Exception:
             logger.exception("Upload purge failed")
+        if settings.SLA_ALERTS_ENABLED:
+            try:
+                async with AsyncSessionLocal() as db:
+                    warned, breached = await sla_service.check_deadlines(db)
+                if warned or breached:
+                    logger.info("Sent %d due-soon and %d overdue alert(s)", warned, breached)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("SLA check failed")
+        try:
+            async with AsyncSessionLocal() as db:
+                purged = await notification_service.purge_old(db)
+            if purged:
+                logger.info("Deleted %d old notification(s)", purged)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Notification purge failed")
         await asyncio.sleep(interval_minutes * 60)
 
 

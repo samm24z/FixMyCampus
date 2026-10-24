@@ -159,7 +159,8 @@ async def promote_new_main(db: AsyncSession, old_main: Ticket, actor: Optional[U
         return
     for member in members:
         member.parent_ticket_id = None if member is successor else successor.id
-    for field in ("priority", "escalation_level", "sla_deadline", "assigned_to", "confirmed_department_id", "confirmed_category"):
+    for field in ("priority", "escalation_level", "sla_deadline", "sla_warned_at", "sla_breached_at",
+                  "assigned_to", "confirmed_department_id", "confirmed_category"):
         setattr(successor, field, getattr(old_main, field))
     old_main.report_count = 1
     await _recount(db, successor)

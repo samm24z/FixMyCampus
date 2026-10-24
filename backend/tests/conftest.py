@@ -153,6 +153,7 @@ async def clean_operational_data():
     yield
     async with engine.begin() as conn:
         await conn.execute(text("DELETE FROM audit_logs"))
+        await conn.execute(text("DELETE FROM notifications"))
         await conn.execute(text("DELETE FROM tickets"))
         await conn.execute(text("DELETE FROM knowledge_documents"))
         await conn.execute(

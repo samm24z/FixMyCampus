@@ -55,7 +55,7 @@ from app.schemas.ticket_detail import (
     TicketDetailRead,
     TicketPermissions,
 )
-from app.services import group_service
+from app.services import group_service, notification_service
 from app.services import upload_service
 from app.services.audit_service import record_audit
 
@@ -288,6 +288,7 @@ def _record_status(db: AsyncSession, ticket: Ticket, user: Optional[User], old: 
         db, user=user, action=AuditActionEnum.STATUS_CHANGE, entity_type="ticket", entity_id=ticket.id,
         old_values={"status": old}, new_values={"status": new, "remarks": remarks},
     )
+    notification_service.status_changed(db, ticket, user, old, new, remarks)
 
 
 # --------------------------------------------------------------- operations
@@ -321,6 +322,7 @@ async def create_ticket(db: AsyncSession, user: User, payload: TicketCreate) -> 
         db, user=user, action=AuditActionEnum.CREATE, entity_type="ticket", entity_id=ticket.id,
         new_values={"ticket_number": ticket.ticket_number, "category": ticket.category, "priority": ticket.priority},
     )
+    await notification_service.ticket_filed(db, ticket, user)
     await db.commit()
     return await _detail_after_commit(db, user, ticket.id)
 
@@ -384,6 +386,8 @@ async def assign_ticket(db: AsyncSession, user: User, ticket_ref: str, payload: 
         db, user=user, action=AuditActionEnum.ASSIGNMENT, entity_type="ticket", entity_id=ticket.id,
         old_values=old, new_values={"assigned_to": str(assignee.id), "confirmed_department_id": str(department_id)},
     )
+    if old["assigned_to"] != str(assignee.id):
+        notification_service.assigned(db, ticket, assignee, user)
     await db.commit()
     return await _detail_after_commit(db, user, ticket.id)
 
@@ -420,6 +424,8 @@ async def update_triage(db: AsyncSession, user: User, ticket_ref: str, payload: 
         ticket.sla_deadline = await _sla_deadline(db, ticket.category, ticket.priority, ticket.created_at)
         new["sla_deadline"] = ticket.sla_deadline.isoformat() if ticket.sla_deadline else None
 
+    if "sla_deadline" in new:
+        ticket.sla_warned_at = ticket.sla_breached_at = None  # a new deadline gets its own alerts
     if new:
         record_audit(
             db, user=user, action=AuditActionEnum.UPDATE, entity_type="ticket", entity_id=ticket.id,
@@ -445,6 +451,7 @@ async def add_comment(db: AsyncSession, user: User, ticket_ref: str, payload: Co
     if payload.is_internal and not policy.can_comment_internal(user, ticket):
         raise ForbiddenException("Only staff can add staff-only notes")
     db.add(TicketComment(ticket_id=ticket.id, user_id=user.id, content=payload.content, is_internal=payload.is_internal))
+    await notification_service.comment_added(db, ticket, user, payload.content, payload.is_internal)
     await db.commit()
     return await _detail_after_commit(db, user, ticket.id)
 
@@ -463,6 +470,7 @@ async def reopen_ticket(db: AsyncSession, user: User, ticket_ref: str, payload: 
     ticket.resolved_at = None
     _record_status(db, ticket, user, old, ticket.status, payload.reason)
     await group_service.propagate_status(db, ticket, ticket.status)
+    await notification_service.reopened(db, ticket, user, payload.reason)
     await db.commit()
     return await _detail_after_commit(db, user, ticket.id)
 
@@ -476,6 +484,7 @@ async def confirm_resolution(db: AsyncSession, user: User, ticket_ref: str) -> T
     old = ticket.status
     ticket.status = S.CLOSED.value
     _record_status(db, ticket, user, old, ticket.status, "Confirmed fixed by the reporter")
+    await notification_service.confirmed_fixed(db, ticket, user)
     await db.commit()
     return await _detail_after_commit(db, user, ticket.id)
 
@@ -514,6 +523,7 @@ async def submit_feedback(db: AsyncSession, user: User, ticket_ref: str, payload
         db, user=user, action=AuditActionEnum.FEEDBACK_SUBMITTED, entity_type="ticket", entity_id=ticket.id,
         old_values=old, new_values={"rating": payload.rating, "comments": payload.comments},
     )
+    await notification_service.feedback_received(db, ticket, user, payload.rating, payload.comments)
     await db.commit()
     return await _detail_after_commit(db, user, ticket.id)
 

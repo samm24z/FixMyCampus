@@ -14,7 +14,7 @@ from app.schemas.assignment import AssignmentCreate, AssignmentRead
 from app.schemas.feedback import FeedbackCreate, FeedbackRead
 from app.schemas.duplicate import DuplicateCreate, DuplicateRead
 from app.schemas.sla import SLARuleBase, SLARuleCreate, SLARuleUpdate, SLARuleRead
-from app.schemas.notification import NotificationCreate, NotificationRead, NotificationMarkRead
+from app.schemas.notification import NotificationMarkRead, NotificationRead, UnreadCount
 from app.schemas.audit import AuditLogRead, AuditLogFilter
 from app.schemas.knowledge import KnowledgeDocumentBase, KnowledgeDocumentCreate, KnowledgeDocumentRead, KnowledgeChunkRead
 from app.schemas.analytics import (
@@ -68,7 +68,7 @@ __all__ = [
     "SLARuleCreate",
     "SLARuleUpdate",
     "SLARuleRead",
-    "NotificationCreate",
+    "UnreadCount",
     "NotificationRead",
     "NotificationMarkRead",
     "AuditLogRead",
