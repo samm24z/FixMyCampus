@@ -88,7 +88,7 @@ def status_changed(
         message = ticket.title
         kind = N.STATUS_CHANGED
     if remarks and remarks.strip() and new in (S.RESOLVED.value, S.CLOSED.value):
-        message += f" Note: {_snippet(remarks)}"
+        message = message.rstrip(".") + f". Note: {_snippet(remarks)}"
     _stage(db, ticket.created_by, ticket, kind, f"{ticket.ticket_number} {STATUS_TEXT.get(new, 'was updated')}", message)
 
 
@@ -110,7 +110,7 @@ async def reopened(db: AsyncSession, ticket: Ticket, actor: User, reason: Option
     """The work wasn't finished for the reporter: tell whoever did it, or the coordinators."""
     assignee = await _user(db, ticket.assigned_to)
     recipients = [assignee] if assignee and assignee.is_active else await coordinators(db)
-    message = ticket.title + (f" Reason: {_snippet(reason)}" if reason and reason.strip() else "")
+    message = ticket.title + (f". Reason: {_snippet(reason)}" if reason and reason.strip() else "")
     notify(db, recipients, ticket, N.STATUS_CHANGED, f"{ticket.ticket_number} was reopened by the reporter", message, actor=actor)
 
 
@@ -134,7 +134,7 @@ async def comment_added(db: AsyncSession, ticket: Ticket, actor: User, content: 
 
 
 async def feedback_received(db: AsyncSession, ticket: Ticket, actor: User, rating: int, comments: Optional[str]) -> None:
-    message = ticket.title + (f" “{_snippet(comments)}”" if comments and comments.strip() else "")
+    message = ticket.title + (f". “{_snippet(comments)}”" if comments and comments.strip() else "")
     notify(
         db, [await _user(db, ticket.assigned_to)], ticket, N.FEEDBACK_RECEIVED,
         f"{ticket.ticket_number} was rated {rating}/5", message, actor=actor,
