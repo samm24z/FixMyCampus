@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Ticket as TicketIcon, Search, Plus, ArrowUpRight, Clock } from 'lucide-react';
+import { Ticket as TicketIcon, Search, Plus, ArrowUpRight, Clock, Users, GitMerge } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -42,7 +42,17 @@ export const TicketsPage: React.FC = () => {
       {error && <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
       {isLoading && <p className="py-10 text-center text-sm text-muted-foreground">Loading tickets...</p>}
       {!isLoading && !error && tickets.length === 0 && <div className="rounded-lg border border-dashed py-16 text-center text-muted-foreground"><TicketIcon className="mx-auto h-10 w-10 mb-3" /><p className="text-sm">No tickets found.</p></div>}
-      <div className="grid gap-4">{tickets.map((ticket) => <Card key={ticket.id} className="hover:border-primary/50 transition-all"><CardContent className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"><div className="space-y-2"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">{ticket.ticket_number}</span><Badge variant="outline">{ticket.category}</Badge><Badge variant={priorityVariant(ticket.priority)}>{priorityLabel(ticket.priority)}</Badge>{ticket.report_count > 1 && <Badge variant="warning">{ticket.report_count} reports</Badge>}{ticket.parent_ticket_id && <Badge variant="outline">Grouped</Badge>}<span className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> {new Date(ticket.created_at).toLocaleString()}</span></div><h3 className="font-semibold text-base">{ticket.title}</h3><p className="text-xs text-muted-foreground">Location: <span className="font-medium text-foreground">{ticket.location}</span></p></div><div className="flex items-center gap-3"><Badge variant={statusVariant(ticket.status)}>{statusLabel(ticket.status)}</Badge><Link to={`/tickets/${ticket.ticket_number}`}><Button variant="outline" size="sm" className="gap-1">View <ArrowUpRight className="h-3.5 w-3.5" /></Button></Link></div></CardContent></Card>)}</div>
+      <div className="grid gap-4">{tickets.map((ticket) => <Card key={ticket.id} className="hover:border-primary/50 transition-all"><CardContent className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"><div className="space-y-2"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">{ticket.ticket_number}</span><Badge variant="outline">{ticket.category}</Badge><Badge variant={priorityVariant(ticket.priority)}>{priorityLabel(ticket.priority)}</Badge>{ticket.report_count > 1 && <Badge variant="warning">{ticket.report_count} reports</Badge>}{ticket.parent_ticket_id && <Badge variant="outline">Grouped</Badge>}
+                  {ticket.is_merged_duplicate && (
+                    <Badge variant="outline" className="border-amber-500/50 text-amber-600 bg-amber-500/10 text-xs flex items-center gap-1">
+                      <GitMerge className="h-3 w-3" /> Merged Duplicate
+                    </Badge>
+                  )}
+                  {Boolean(ticket.total_students_raised && ticket.total_students_raised > 1) && (
+                    <Badge variant="secondary" className="bg-primary/15 text-primary font-semibold text-xs flex items-center gap-1 border border-primary/20">
+                      <Users className="h-3 w-3" /> Raised by {ticket.total_students_raised} students
+                    </Badge>
+                  )}<span className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> {new Date(ticket.created_at).toLocaleString()}</span></div><h3 className="font-semibold text-base">{ticket.title}</h3><p className="text-xs text-muted-foreground">Location: <span className="font-medium text-foreground">{ticket.location}</span></p></div><div className="flex items-center gap-3"><Badge variant={statusVariant(ticket.status)}>{statusLabel(ticket.status)}</Badge><Link to={`/tickets/${ticket.ticket_number}`}><Button variant="outline" size="sm" className="gap-1">View <ArrowUpRight className="h-3.5 w-3.5" /></Button></Link></div></CardContent></Card>)}</div>
       {result && result.total_pages > 1 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>{result.total} tickets - page {result.page} of {result.total_pages}</span>

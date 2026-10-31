@@ -50,6 +50,8 @@ from app.schemas.ticket import (
     TicketWithdrawRequest,
 )
 from app.schemas.ticket_detail import (
+    MergedDuplicateReport,
+    MergedIntoInfo,
     DashboardSummary,
     TicketAssignmentRequest,
     TicketDetailRead,
@@ -147,7 +149,10 @@ async def list_tickets(
     db: AsyncSession, user: User, filters: TicketFilter, page: int, page_size: int
 ) -> tuple[list[Ticket], int, int]:
     """Return (tickets, total, total_pages) for one page of the user's visible tickets."""
-    query = _filtered_query(user, filters)
+    query = _filtered_query(user, filters).options(
+        selectinload(Ticket.duplicates_as_primary),
+        selectinload(Ticket.duplicates_as_duplicate),
+    )
     total = await db.scalar(select(func.count()).select_from(query.subquery())) or 0
     rows = await db.scalars(
         query.order_by(Ticket.created_at.desc(), Ticket.id).offset((page - 1) * page_size).limit(page_size)
@@ -176,6 +181,11 @@ async def dashboard_summary(db: AsyncSession, user: User) -> DashboardSummary:
 def to_read(ticket: Ticket, user: User) -> TicketRead:
     """The ticket as ``user`` may see it: suggestions are for coordinators and admins only."""
     read = TicketRead.model_validate(ticket)
+    if hasattr(ticket, "duplicates_as_primary") and ticket.duplicates_as_primary:
+        read.duplicate_count = len([d for d in ticket.duplicates_as_primary if d.is_verified])
+    if hasattr(ticket, "duplicates_as_duplicate") and ticket.duplicates_as_duplicate:
+        read.is_merged_duplicate = any(d.is_verified for d in ticket.duplicates_as_duplicate)
+    read.total_students_raised = 1 + read.duplicate_count
     if policy.can_review_suggestions(user):
         return read
     return read.model_copy(update={"suggested_category": None, "suggested_department_id": None, "ai_confidence": None})
@@ -211,6 +221,47 @@ def build_detail(ticket: Ticket, user: User) -> TicketDetailRead:
         for comment in sorted(ticket.comments, key=lambda item: item.created_at)
         if show_internal or not comment.is_internal
     ]
+    merged_into = None
+    for d in (ticket.duplicates_as_duplicate or []):
+        if d.is_verified and d.primary_ticket:
+            merged_into = MergedIntoInfo(
+                primary_ticket_id=d.primary_ticket.id,
+                primary_ticket_number=d.primary_ticket.ticket_number,
+                primary_title=d.primary_ticket.title,
+                similarity_score=d.similarity_score,
+            )
+            break
+
+    merged_duplicates = []
+    pending_candidates = []
+    blocks_set = {ticket.location} if ticket.location else set()
+
+    for d in sorted(ticket.duplicates_as_primary or [], key=lambda x: x.created_at):
+        if not d.duplicate_ticket or d.detected_by == "DISMISSED":
+            continue
+        dup_ticket = d.duplicate_ticket
+        st_name = dup_ticket.creator.full_name if dup_ticket.creator else "Student"
+        st_email = dup_ticket.creator.email if dup_ticket.creator else ""
+        rep = MergedDuplicateReport(
+            ticket_id=dup_ticket.id,
+            ticket_number=dup_ticket.ticket_number,
+            student_id=dup_ticket.created_by,
+            student_name=st_name,
+            student_email=st_email,
+            location=dup_ticket.location or "",
+            title=dup_ticket.title,
+            description=dup_ticket.description,
+            similarity_score=d.similarity_score,
+            is_verified=d.is_verified,
+            created_at=dup_ticket.created_at,
+        )
+        if d.is_verified:
+            merged_duplicates.append(rep)
+            if dup_ticket.location:
+                blocks_set.add(dup_ticket.location)
+        else:
+            pending_candidates.append(rep)
+
     show_location = policy.can_see_media_location(user, ticket)
     return TicketDetailRead(
         **base,
@@ -224,6 +275,10 @@ def build_detail(ticket: Ticket, user: User) -> TicketDetailRead:
         assigned_to_name=ticket.assignee.full_name if ticket.assignee else None,
         department_name=ticket.confirmed_department.name if ticket.confirmed_department else None,
         comments=comments,
+        merged_into=merged_into,
+        reported_blocks=sorted(list(blocks_set)),
+        merged_duplicates=merged_duplicates,
+        pending_duplicate_candidates=pending_candidates,
         history=[StatusHistoryRead.model_validate(h) for h in sorted(ticket.status_history, key=lambda item: item.created_at)],
         assignments=[AssignmentRead.model_validate(a) for a in sorted(ticket.assignments, key=lambda item: item.created_at)],
         feedback=FeedbackRead.model_validate(ticket.feedback) if ticket.feedback else None,
@@ -234,6 +289,7 @@ def build_detail(ticket: Ticket, user: User) -> TicketDetailRead:
             can_comment=policy.can_comment(user, ticket),
             can_comment_internal=policy.can_comment_internal(user, ticket),
             can_reopen=policy.can_reopen(user, ticket),
+            can_merge=policy.can_assign(user, ticket),
             can_confirm=policy.can_confirm_resolution(user, ticket),
             can_withdraw=policy.can_withdraw(user, ticket),
             can_give_feedback=policy.can_give_feedback(user, ticket),

@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, TicketPlus } from 'lucide-react';
+import { ArrowLeft, Send, TicketPlus, AlertTriangle, ExternalLink } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { LocationPicker } from '@/components/LocationPicker';
 import { MediaSection } from '@/components/media/MediaSection';
 import type { ReportPoint } from '@/components/media/LocationExtras';
 import { useReportMedia } from '@/components/media/useReportMedia';
-import { CATEGORY_OPTIONS, getApiError, ticketsApi, type MediaDraft, type TicketPriority } from '@/lib/api';
+import { CATEGORY_OPTIONS, getApiError, ticketsApi, type MediaDraft, type TicketPriority, type DuplicateCandidateResult } from '@/lib/api';
 import { PRIORITIES, priorityLabel } from '@/lib/tickets';
 
 export const CreateComplaintPage: React.FC = () => {
@@ -20,6 +21,35 @@ export const CreateComplaintPage: React.FC = () => {
   const [observedAt, setObservedAt] = useState<Date | null>(null);
   // LocationPicker only reads `initial` when it mounts, so a new place from the photos remounts it.
   const [picker, setPicker] = useState({ key: 0, initial: '' });
+  const [candidates, setCandidates] = useState<DuplicateCandidateResult[]>([]);
+  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
+
+  useEffect(() => {
+    if (form.title.trim().length < 5 || form.location.trim().length < 2) {
+      setCandidates([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsCheckingDuplicates(true);
+        const res = await ticketsApi.checkDuplicates({
+          title: form.title,
+          description: form.description,
+          location: form.location,
+          category: form.category,
+        });
+        setCandidates(Array.isArray(res.data) ? res.data : []);
+      } catch {
+        setCandidates([]);
+      } finally {
+        setIsCheckingDuplicates(false);
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [form.title, form.location, form.category]);
+
 
   function updateField(field: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [field]: value }));

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Clock, MapPin, User, Building2, FileText, Send, RotateCcw, CalendarClock, CheckCircle2, Star, Undo2, Sparkles, Copy, Users, Scissors } from 'lucide-react';
+import { ArrowLeft, Clock, MapPin, User, Building2, FileText, Send, RotateCcw, CalendarClock, CheckCircle2, Star, Undo2, Sparkles, Copy, Users, Scissors, GitMerge, XCircle } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -126,6 +126,21 @@ export const TicketDetailPage: React.FC = () => {
     <div className="space-y-6 max-w-5xl mx-auto">
       <Button variant="ghost" size="sm" className="gap-1" onClick={() => navigate('/tickets')}><ArrowLeft className="h-4 w-4" /> Back to Tickets</Button>
       {error && <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+      {ticket.merged_into && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <GitMerge className="h-4 w-4 text-amber-600" />
+            <span>
+              This complaint was merged into master issue{' '}
+              <Link to={`/tickets/${ticket.merged_into.primary_ticket_number}`} className="font-bold underline text-primary">
+                {ticket.merged_into.primary_ticket_number}: {ticket.merged_into.primary_title}
+              </Link>{' '}
+              ({Math.round(ticket.merged_into.similarity_score * 100)}% match).
+            </span>
+          </div>
+        </div>
+      )}
+
       <div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-md">{ticket.ticket_number}</span>

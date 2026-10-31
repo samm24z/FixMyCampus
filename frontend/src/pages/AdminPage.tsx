@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { UserManagement } from '@/components/admin/UserManagement';
+import { DuplicateClustersView } from '@/components/admin/DuplicateClustersView';
 import { getApiError, ticketsApi, type DashboardSummary, type Paginated, type Ticket, type TicketStatus } from '@/lib/api';
 import { STATUSES, isDone, priorityLabel, priorityVariant, statusLabel, statusVariant } from '@/lib/tickets';
 
@@ -50,6 +51,7 @@ export const AdminPage: React.FC = () => {
       <div className="flex items-center gap-2"><h1 className="text-3xl font-bold tracking-tight">Admin</h1><Badge variant="destructive">Admin Access</Badge></div>
       {error && <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">{stats.map((stat) => <Card key={stat.label}><CardContent className="p-5"><p className="text-xs text-muted-foreground">{stat.label}</p><p className="text-2xl font-bold">{stat.value}</p></CardContent></Card>)}</div>
+      <DuplicateClustersView />
       <UserManagement />
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-primary" /> All Tickets</CardTitle><CardDescription>Every ticket on campus and where it stands. Click a status to show only those tickets.</CardDescription></CardHeader>

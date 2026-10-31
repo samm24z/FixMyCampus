@@ -36,6 +36,57 @@ export interface Place {
   description: string;
 }
 
+
+export interface MergedDuplicateReport {
+  ticket_id: string;
+  ticket_number: string;
+  student_id: string;
+  student_name: string;
+  student_email: string;
+  location: string;
+  title: string;
+  description: string;
+  similarity_score: number;
+  is_verified: boolean;
+  created_at: string;
+}
+
+export interface MergedIntoInfo {
+  primary_ticket_id: string;
+  primary_ticket_number: string;
+  primary_title: string;
+  similarity_score: number;
+}
+
+export interface DuplicateCandidateResult {
+  ticket_id: string;
+  ticket_number: string;
+  title: string;
+  category: string;
+  location: string;
+  status: string;
+  similarity_score: number;
+  reported_by_name: string;
+  created_at: string;
+}
+
+export interface DuplicateClusterItem {
+  primary_ticket_id: string;
+  primary_ticket_number: string;
+  title: string;
+  description: string;
+  category: string;
+  priority: string;
+  status: string;
+  location: string;
+  student_count: number;
+  students: string[];
+  locations: string[];
+  created_at: string;
+  merged_tickets: MergedDuplicateReport[];
+  pending_candidates: MergedDuplicateReport[];
+}
+
 export interface Ticket {
   id: string;
   ticket_number: string;
@@ -50,6 +101,10 @@ export interface Ticket {
   confirmed_department_id: string | null;
   ai_confidence: number | null;
   report_count: number;
+  duplicate_count?: number;
+  total_students_raised?: number;
+  is_merged_duplicate?: boolean;
+
   parent_ticket_id: string | null;
   /** Only coordinators and admins get this. */
   parent_ticket_number: string | null;
@@ -94,6 +149,7 @@ export interface TicketPermissions {
   can_give_feedback: boolean;
   can_review_suggestions: boolean;
   can_split_group: boolean;
+  can_merge?: boolean;
   statuses_requiring_remarks: TicketStatus[];
 }
 
@@ -236,6 +292,11 @@ export interface TicketDetail extends Ticket {
   suggestions: TicketSuggestions | null;
   duplicates: PossibleDuplicate[];
   group_members: GroupMember[];
+  merged_into?: MergedIntoInfo | null;
+  reported_blocks?: string[];
+  merged_duplicates?: MergedDuplicateReport[];
+  pending_duplicate_candidates?: MergedDuplicateReport[];
+
 }
 
 export interface Paginated<T> {
@@ -440,6 +501,18 @@ export const uploadsApi = {
 };
 
 export const ticketsApi = {
+  checkDuplicates: (payload: { title: string; description: string; category?: string; location?: string; exclude_ticket_ref?: string }) =>
+    api.post<DuplicateCandidateResult[]>('/tickets/check-duplicates', payload),
+  clusters: () => api.get<DuplicateClusterItem[]>('/tickets/duplicates/clusters'),
+  getDuplicateClusters: () =>
+    api.get<DuplicateClusterItem[]>('/tickets/duplicates/clusters'),
+  merge: (ref: string, duplicateRefs: string[], notes?: string) =>
+    api.post<TicketDetail>(`/tickets/${ref}/merge`, { duplicate_ticket_refs: duplicateRefs, notes: notes || null }),
+  unmerge: (ref: string, duplicateRef: string) =>
+    api.post<TicketDetail>(`/tickets/${ref}/unmerge/${duplicateRef}`),
+  dismissDuplicate: (ref: string, duplicateRef: string) =>
+    api.post<TicketDetail>(`/tickets/${ref}/dismiss-duplicate/${duplicateRef}`),
+
   list: (params: TicketListParams = {}) => api.get<Paginated<Ticket>>('/tickets', { params: clean(params) }),
   summary: () => api.get<DashboardSummary>('/tickets/summary'),
   create: (body: TicketCreateBody) => api.post<TicketDetail>('/tickets', body),

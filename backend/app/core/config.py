@@ -61,6 +61,13 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "FixMyCampus AI"
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def parse_debug(cls, v: Any) -> bool:
+        if isinstance(v, str):
+            return v.lower() in ("true", "1", "yes", "t", "dev", "development", "debug")
+        return bool(v)
+
     API_V1_STR: str = "/api/v1"
 
     # Self-signup is limited to these email domains (comma separated, matched exactly: sub-domains and

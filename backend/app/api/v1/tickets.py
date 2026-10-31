@@ -22,8 +22,16 @@ from app.schemas.ticket import (
     TicketTriageUpdate,
     TicketWithdrawRequest,
 )
-from app.schemas.ticket_detail import DashboardSummary, TicketAssignmentRequest, TicketDetailRead
-from app.services import group_service, suggestion_service, ticket_service
+from app.schemas.ticket_detail import (
+    CheckDuplicatesRequest,
+    DashboardSummary,
+    DuplicateCandidateResult,
+    DuplicateClusterItem,
+    MergeTicketsRequest,
+    TicketAssignmentRequest,
+    TicketDetailRead,
+)
+from app.services import deduplication_service, group_service, suggestion_service, ticket_service
 
 
 router = APIRouter(prefix="/tickets")
@@ -160,3 +168,86 @@ async def dismiss_duplicate(ticket_ref: str, other_ref: str, db: DbSession, curr
 @router.post("/{ticket_ref}/group/split", response_model=TicketDetailRead)
 async def split_from_group(ticket_ref: str, db: DbSession, current_user: CurrentUser) -> TicketDetailRead:
     return await group_service.split_from_group(db, current_user, ticket_ref)
+
+
+@router.post("/check-duplicates", response_model=list[DuplicateCandidateResult])
+async def check_duplicates(
+    payload: CheckDuplicatesRequest,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> list[DuplicateCandidateResult]:
+    """Check for active duplicate complaints matching incoming title/description/location."""
+    exclude_id = None
+    if payload.exclude_ticket_ref:
+        try:
+            exclude_ticket = await ticket_service.get_ticket_by_number(db, payload.exclude_ticket_ref)
+            if exclude_ticket:
+                exclude_id = exclude_ticket.id
+        except Exception:
+            pass
+    return await deduplication_service.find_duplicate_candidates(
+        db,
+        title=payload.title,
+        description=payload.description,
+        location=payload.location,
+        category=payload.category,
+        exclude_ticket_id=exclude_id,
+    )
+
+
+@router.get("/duplicates/clusters", response_model=list[DuplicateClusterItem])
+async def get_duplicate_clusters(
+    db: DbSession,
+    current_user: CurrentUser,
+) -> list[DuplicateClusterItem]:
+    """Retrieve consolidated issue clusters where multiple students reported similar grievances across blocks."""
+    return await deduplication_service.get_duplicate_clusters(db)
+
+
+@router.post("/{ticket_ref}/merge", response_model=TicketDetailRead)
+async def merge_tickets(
+    ticket_ref: str,
+    payload: MergeTicketsRequest,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> TicketDetailRead:
+    """Merge duplicate student complaints into this primary master ticket."""
+    return await deduplication_service.merge_tickets(
+        db,
+        current_user,
+        primary_ref=ticket_ref,
+        duplicate_refs=payload.duplicate_ticket_refs,
+        notes=payload.notes,
+    )
+
+
+@router.post("/{ticket_ref}/unmerge/{duplicate_ref}", response_model=TicketDetailRead)
+async def unmerge_ticket(
+    ticket_ref: str,
+    duplicate_ref: str,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> TicketDetailRead:
+    """Detach a previously merged duplicate ticket and restore it to independent status."""
+    return await deduplication_service.unmerge_ticket(
+        db,
+        current_user,
+        primary_ref=ticket_ref,
+        duplicate_ref=duplicate_ref,
+    )
+
+
+@router.post("/{ticket_ref}/dismiss-duplicate/{duplicate_ref}", response_model=TicketDetailRead)
+async def dismiss_duplicate_candidate(
+    ticket_ref: str,
+    duplicate_ref: str,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> TicketDetailRead:
+    """Dismiss a duplicate suggestion and mark complaints as unrelated."""
+    return await deduplication_service.dismiss_duplicate_candidate(
+        db,
+        current_user,
+        primary_ref=ticket_ref,
+        duplicate_ref=duplicate_ref,
+    )

@@ -112,6 +112,9 @@ class TicketRead(TicketBase):
     reopened_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+    duplicate_count: int = 0
+    total_students_raised: int = 1
+    is_merged_duplicate: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
